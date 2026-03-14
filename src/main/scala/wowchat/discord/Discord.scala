@@ -170,14 +170,18 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
 
     Global.wowToDiscord.get((ChatEvents.CHAT_MSG_GUILD, None))
       .foreach(_.foreach {
-        case (discordChannel, _) =>
+        case (discordChannel, channelConfig) =>
           val formatted = notificationConfig
             .format
             .replace("%time", Global.getTime)
             .replace("%user", name)
             .replace("%achievement", messageResolver.resolveAchievementId(achievementId))
 
-          Discord.sendMessage(discordChannel, formatted)
+          val filter = shouldFilter(channelConfig.filters, formatted)
+          logger.info(s"${if (filter) "FILTERED " else ""}WoW->Discord(${discordChannel.getName}) $formatted")
+          if (!filter) {
+            Discord.sendMessage(discordChannel, formatted)
+          }
       })
   }
 
