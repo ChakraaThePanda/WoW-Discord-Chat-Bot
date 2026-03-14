@@ -1,8 +1,8 @@
 package wowchat.discord;
 
 import com.typesafe.config.Config;
-import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
+import com.typesafe.config.ConfigResolveOptions;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -44,17 +44,32 @@ public class DiscordDMHandler extends ListenerAdapter {
      */
     public static void register(String configFile) {
         try {
-            Config config = ConfigFactory.parseFile(new File(configFile)).resolve();
+            // Use allowUnresolved so missing env vars (${?VAR}) don't cause failures
+            Config config = ConfigFactory.parseFile(new File(configFile))
+                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
+
             if (!config.hasPath("dmAutoReply")) return;
 
             String reply = config.getString("dmAutoReply").trim();
             if (reply.isEmpty()) return;
 
-            // Get JDA from Global discord instance via reflection
-            wowchat.discord.Discord discord = (wowchat.discord.Discord) Global$.MODULE$.discord();
-            java.lang.reflect.Field jdaField = discord.getClass().getDeclaredField("jda");
-            jdaField.setAccessible(true);
-            JDA jda = (JDA) jdaField.get(discord);
+            // Get JDA — reuse cached instance from GuildOnlineListPublisher if available,
+            // otherwise find it by type via reflection
+            JDA jda = GuildOnlineListPublisher.getJda();
+            if (jda == null) {
+                wowchat.discord.Discord discord = (wowchat.discord.Discord) Global$.MODULE$.discord();
+                for (java.lang.reflect.Field field : discord.getClass().getDeclaredFields()) {
+                    if (!JDA.class.isAssignableFrom(field.getType())) continue;
+                    field.setAccessible(true);
+                    Object value = field.get(discord);
+                    if (value instanceof JDA) { jda = (JDA) value; break; }
+                }
+            }
+
+            if (jda == null) {
+                System.err.println("[DiscordDMHandler] Could not obtain JDA instance.");
+                return;
+            }
 
             jda.addEventListener(new DiscordDMHandler(reply));
             System.out.println("[DiscordDMHandler] DM auto-reply registered.");

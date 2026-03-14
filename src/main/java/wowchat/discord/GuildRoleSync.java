@@ -73,7 +73,8 @@ public final class GuildRoleSync {
         }
 
         started = true;
-        System.out.println("[GuildRoleSync] Initializing with " + rankToRoleId.size() + " rank mapping(s).");
+        long periodSec = Math.max(1, GuildOnlineListPublisher.getUpdateMinutes()) * 60L;
+        System.out.println("[GuildRoleSync] Initializing with " + rankToRoleId.size() + " rank mapping(s), interval: " + (periodSec / 60) + " min.");
 
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "wowchat-role-sync");
@@ -81,14 +82,14 @@ public final class GuildRoleSync {
             return t;
         });
 
-        // Run once 30 seconds after startup (give roster time to load), then every 5 minutes
+        // Run once 10 seconds after startup, then on same interval as guild online list
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 tick();
             } catch (Throwable t) {
                 System.err.println("[GuildRoleSync] Unexpected error in tick: " + t.getMessage());
             }
-        }, 30L, 300L, TimeUnit.SECONDS);
+        }, 10L, periodSec, TimeUnit.SECONDS);
     }
 
     // -------------------------------------------------------------------------
@@ -96,15 +97,15 @@ public final class GuildRoleSync {
     // -------------------------------------------------------------------------
     private static void tick() {
         JDA jda = getJda();
-        if (jda == null) return;
+        if (jda == null) { System.out.println("[GuildRoleSync] tick: JDA not available."); return; }
 
         GamePacketHandler handler = getHandler();
-        if (handler == null) return;
+        if (handler == null) { System.out.println("[GuildRoleSync] tick: game handler not available yet."); return; }
 
         // Get rank name map from GuildInfo: rankIndex -> rankName
         Map<Integer, String> rankNames = getRankNames(handler);
         if (rankNames.isEmpty()) {
-            System.out.println("[GuildRoleSync] No rank names available yet, skipping tick.");
+            System.out.println("[GuildRoleSync] tick: no rank names available yet, skipping.");
             return;
         }
 
@@ -166,9 +167,9 @@ public final class GuildRoleSync {
             }
         }
 
-        if (processed > 0) {
+        if (assigned > 0) {
             System.out.println("[GuildRoleSync] Tick complete: " + processed + " matched, "
-                + assigned + " role(s) assigned, " + skipped + " already had role.");
+                + assigned + " role(s) assigned.");
         }
     }
 

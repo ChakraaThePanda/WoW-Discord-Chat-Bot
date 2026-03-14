@@ -84,7 +84,8 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
       GatewayIntent.GUILD_MEMBERS,
       GatewayIntent.GUILD_MESSAGES,
       GatewayIntent.GUILD_PRESENCES,
-      GatewayIntent.MESSAGE_CONTENT)
+      GatewayIntent.MESSAGE_CONTENT,
+      GatewayIntent.DIRECT_MESSAGES)
     .setMemberCachePolicy(MemberCachePolicy.ALL)
     .disableCache(CacheFlag.SCHEDULED_EVENTS,
       CacheFlag.VOICE_STATE)
@@ -111,7 +112,9 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
 
   def sendMessageFromWow(from: Option[String], message: String, wowType: Byte, wowChannel: Option[String]): Unit = {
     Global.wowToDiscord.get((wowType, wowChannel.map(_.toLowerCase))).foreach(discordChannels => {
-      val parsedLinks = messageResolver.resolveEmojis(messageResolver.stripColorCoding(messageResolver.resolveLinks(message)))
+      // Strip server-injected prefix (e.g. "{?" added by some private servers)
+      val cleanMessage = if (message.startsWith("{?")) message.substring(2) else message
+      val parsedLinks = messageResolver.resolveEmojis(messageResolver.stripColorCoding(messageResolver.resolveLinks(cleanMessage)))
 
       discordChannels.foreach {
         case (channel, channelConfig) =>

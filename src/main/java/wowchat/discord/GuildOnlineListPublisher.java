@@ -58,6 +58,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class GuildOnlineListPublisher {
 
+    // -------------------------------------------------------------------------
+    // Race cache — populated from SMSG_NAME_QUERY responses via cacheRace()
+    // -------------------------------------------------------------------------
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> raceCache =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void cacheRace(String name, String race) {
+        if (name != null && !name.isEmpty() && race != null && !race.isEmpty()) {
+            raceCache.put(name.toLowerCase(Locale.ROOT), race);
+        }
+    }
+
+    private static String getRace(String name) {
+        if (name == null || name.isEmpty()) return "";
+        String race = raceCache.get(name.toLowerCase(Locale.ROOT));
+        return race != null ? race + " " : "";
+    }
+
     /**
      * Invisible Unicode marker appended to our message so we can identify it
      * in channel history without affecting visible content.
@@ -101,6 +119,10 @@ public final class GuildOnlineListPublisher {
     // Init — called once from WoWChat.main()
     // -------------------------------------------------------------------------
 
+    public static int getUpdateMinutes() {
+        return updateMinutes;
+    }
+
     public static synchronized void init() {
         if (started) return;
         started = true;
@@ -118,7 +140,7 @@ public final class GuildOnlineListPublisher {
         scheduler = Executors.newSingleThreadScheduledExecutor(
             new DaemonThreadFactory("wowchat-online-list"));
 
-        long initialDelaySec = 5L;
+        long initialDelaySec = 15L;
         long periodSec       = Math.max(1, updateMinutes) * 60L;
 
         scheduler.scheduleAtFixedRate(() -> {
@@ -344,6 +366,21 @@ public final class GuildOnlineListPublisher {
                 });
             }
 
+            // Inject race into each entry: "Name (40 Warrior in Zone)" -> "Name (40 Night Elf Warrior in Zone)"
+            result.replaceAll(entry -> {
+                int parenOpen = entry.indexOf(" (");
+                if (parenOpen < 0) return entry;
+                String charName = entry.substring(0, parenOpen);
+                String race = getRace(charName);
+                if (race.isEmpty()) return entry;
+                // entry is "Name (LEVEL CLASS in ZONE)" — insert race after the level number
+                // find the space after the level: "Name (40 Warrior..." -> insert after "40 "
+                int innerStart = parenOpen + 2; // skip " ("
+                int spaceAfterLevel = entry.indexOf(' ', innerStart);
+                if (spaceAfterLevel < 0) return entry;
+                return entry.substring(0, spaceAfterLevel + 1) + race + entry.substring(spaceAfterLevel + 1);
+            });
+
             return result;
         } catch (Throwable t) {
             System.err.println("[GuildOnlineList] Error reading guild roster: " + t.getMessage());
@@ -384,7 +421,7 @@ public final class GuildOnlineListPublisher {
     // this overhead only happens once per process lifetime.
     // -------------------------------------------------------------------------
 
-    private static JDA getJda() {
+    public static JDA getJda() {
         // Return cached instance if we already found it
         if (cachedJda != null) return cachedJda;
 
@@ -423,7 +460,8 @@ public final class GuildOnlineListPublisher {
     private static void loadConfig() {
         try {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile)).resolve();
+            Config config = ConfigFactory.parseFile(new File(configFile))
+                .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
             // Channel ID — try as long first, then as string
             channelId = 0L;
@@ -439,9 +477,13 @@ public final class GuildOnlineListPublisher {
                 channelId = 0L;
             }
 
-            // Update interval
+            // Update interval — new key with fallback to old key for backward compatibility
             try {
-                updateMinutes = config.getInt("guildOnlineListUpdateMinutes");
+                if (config.hasPath("discordFeaturesUpdateMinutes")) {
+                    updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
+                } else {
+                    updateMinutes = config.getInt("guildOnlineListUpdateMinutes");
+                }
                 if (updateMinutes < 1) updateMinutes = 1;
             } catch (ConfigException e) {
                 updateMinutes = 5;

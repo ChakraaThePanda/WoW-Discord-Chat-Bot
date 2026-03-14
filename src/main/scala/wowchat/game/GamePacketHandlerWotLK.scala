@@ -64,21 +64,22 @@ class GamePacketHandlerWotLK(realmId: Int, realmName: String, sessionKey: Array[
     val guid = unpackGuid(msg.byteBuf)
 
     val nameKnown = msg.byteBuf.readByte // wotlk
-    val (name, charClass) = if (nameKnown == 0) {
+    val (name, charClass, race) = if (nameKnown == 0) {
       val name = msg.readString
       msg.skipString // realm name for cross bg usage
 
       // wotlk changed the char info to bytes
-      msg.byteBuf.skipBytes(1) // race
+      val raceId = msg.byteBuf.readByte & 0xFF
       msg.byteBuf.skipBytes(1) // gender
       val charClass = msg.byteBuf.readByte
-      (name, charClass)
+      val raceName = GamePacketHandlerWotLK.RACE_NAMES.getOrElse(raceId, "")
+      (name, charClass, raceName)
     } else {
       logger.error(s"RECV SMSG_NAME_QUERY - Name not known for guid $guid")
-      ("UNKNOWN", 0xFF.toByte)
+      ("UNKNOWN", 0xFF.toByte, "")
     }
 
-    NameQueryMessage(guid, name, charClass)
+    NameQueryMessage(guid, name, charClass, race)
   }
 
   override protected def parseCharEnum(msg: Packet): Option[CharEnumMessage] = {
@@ -189,4 +190,45 @@ class GamePacketHandlerWotLK(realmId: Int, realmName: String, sessionKey: Array[
         }
     }
   }
+
+  // WotLK SMSG_GUILD_ROSTER: rank block is 56 bytes per rank entry (8 + 48, same as TBC).
+  // Member structure: guid(8) + isOnline(1) + name(str) + rankIndex(4) +
+  //   level(1) + class(1) + zoneId(4) + lastLogoff(4 if offline) +
+  //   officerNote(str) + publicNote(str)
+  override protected def parseGuildRoster(msg: Packet): Map[Long, GuildMember] = {
+    val count = msg.byteBuf.readIntLE
+    guildMotd = Some(msg.readString)
+    val ginfo = msg.readString
+    val rankscount = msg.byteBuf.readIntLE
+    (0 until rankscount).foreach(_ => msg.byteBuf.skipBytes(8 + 48)) // rank info + guild bank (same as TBC)
+    (0 until count).map(_ => {
+      val guid = msg.byteBuf.readLongLE
+      val isOnline = msg.byteBuf.readBoolean
+      val name = msg.readString
+      val rankIndex = msg.byteBuf.readIntLE  // was skipBytes(4) in TBC
+      val level = msg.byteBuf.readByte
+      val charClass = msg.byteBuf.readByte
+      msg.byteBuf.skipBytes(1) // tbc unkn
+      val zoneId = msg.byteBuf.readIntLE
+      val lastLogoff = if (!isOnline) msg.byteBuf.readFloatLE else 0f
+      msg.skipString                         // public note
+      val officerNote = msg.readString       // officer note
+      guid -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, rankIndex, officerNote)
+    }).toMap
+  }
+}
+
+object GamePacketHandlerWotLK {
+  val RACE_NAMES: Map[Int, String] = Map(
+    1  -> "Human",
+    2  -> "Orc",
+    3  -> "Dwarf",
+    4  -> "Night Elf",
+    5  -> "Undead",
+    6  -> "Tauren",
+    7  -> "Gnome",
+    8  -> "Troll",
+    10 -> "Blood Elf",
+    11 -> "Draenei"
+  )
 }

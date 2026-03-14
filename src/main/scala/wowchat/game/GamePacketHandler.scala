@@ -18,7 +18,7 @@ import scala.util.Random
 case class Player(name: String, charClass: Byte)
 case class GuildMember(name: String, isOnline: Boolean, charClass: Byte, level: Byte, zoneId: Int, lastLogoff: Float, rankIndex: Int = 0, officerNote: String = "")
 case class ChatMessage(guid: Long, tp: Byte, message: String, channel: Option[String] = None)
-case class NameQueryMessage(guid: Long, name: String, charClass: Byte)
+case class NameQueryMessage(guid: Long, name: String, charClass: Byte, race: String = "")
 case class AuthChallengeMessage(sessionKey: Array[Byte], byteBuf: ByteBuf)
 case class CharEnumMessage(name: String, guid: Long, race: Byte, guildGuid: Long)
 case class GuildInfo(name: String, ranks: Map[Int, String])
@@ -126,7 +126,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   }
 
   protected def updateGuildiesOnline: Unit = {
-    Global.discord.changeGuildStatus(getGuildiesOnlineMessage(true))
+    // Only update status directly if custom status rotation is not active
+    if (!wowchat.discord.GuildOnlineListPublisher.rotationActive) {
+      Global.discord.changeGuildStatus(getGuildiesOnlineMessage(true))
+    }
   }
 
   protected def queryGuildName: Unit = {
@@ -322,6 +325,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
 
   private def handle_SMSG_NAME_QUERY(msg: Packet): Unit = {
     val nameQueryMessage = parseNameQuery(msg)
+
+    if (nameQueryMessage.race.nonEmpty) {
+      wowchat.discord.GuildOnlineListPublisher.cacheRace(nameQueryMessage.name, nameQueryMessage.race)
+    }
 
     queuedChatMessages
       .remove(nameQueryMessage.guid)
@@ -531,6 +538,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     guildRoster.clear
     guildRoster ++= parseGuildRoster(msg)
     updateGuildiesOnline
+    // Fire name queries for all online members to pre-populate race cache
+    guildRoster.foreach { case (guid, member) =>
+      if (member.isOnline) sendNameQuery(guid)
+    }
   }
 
   protected def parseGuildRoster(msg: Packet): Map[Long, GuildMember] = {
