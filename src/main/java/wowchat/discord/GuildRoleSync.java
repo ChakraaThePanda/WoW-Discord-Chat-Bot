@@ -229,7 +229,7 @@ public final class GuildRoleSync {
     // -------------------------------------------------------------------------
     private static GamePacketHandler getHandler() {
         try {
-            Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
+            scala.Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
             if (gameOpt == null || gameOpt.isEmpty()) return null;
             GameCommandHandler handler = gameOpt.get();
             if (!(handler instanceof GamePacketHandler)) return null;
