@@ -373,9 +373,10 @@ public final class GuildOnlineListPublisher {
                 String charName = entry.substring(0, parenOpen);
                 String race = getRace(charName);
                 if (race.isEmpty()) return entry;
-                // entry is "Name (LEVEL CLASS in ZONE)" — insert race after the level number
-                // find the space after the level: "Name (40 Warrior..." -> insert after "40 "
+                // entry is "Name (Level 40 CLASS in ZONE)" — insert race after the level number
                 int innerStart = parenOpen + 2; // skip " ("
+                // skip "Level " prefix if present
+                if (entry.substring(innerStart).startsWith("Level ")) innerStart += 6;
                 int spaceAfterLevel = entry.indexOf(' ', innerStart);
                 if (spaceAfterLevel < 0) return entry;
                 return entry.substring(0, spaceAfterLevel + 1) + race + entry.substring(spaceAfterLevel + 1);
