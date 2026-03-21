@@ -1,6 +1,13 @@
 # WoWChatHardcore
 Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for the use on the Frostmourne of Stormforge.gg.
-I modified a few things like:
-* Filters to remove certains chars only found on this server
-* A "Who's Online?" feature that updates a message in Discord to see who are online in real time.
+
+---
+### Features I added
+* Guild Online List — auto-updating Discord message showing online members with level, race, class and zone
+* Race display — pre-fetched on startup via name queries, shows e.g. Level 73 Human Paladin
+* Guild Role Sync — automatically assigns Discord roles based on in-game rank via officer notes
+* DM Auto-Reply — bot replies to anyone who DMs it with a configurable message
+* Bot Status Rotation — cycles through custom status messages on a timer with {online-members} token
+* show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
+* Watchdog / Health file — external process monitors bot connectivity and restarts if needed
 * Etc.
