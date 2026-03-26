@@ -1,4 +1,4 @@
-# WoWChatHardcore
+# WoW-Discord-Chat-Bot
 Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for the use on the Frostmourne of Stormforge.gg.
 
 ---
