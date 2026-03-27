@@ -11,4 +11,5 @@ Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added fun
 * show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
 * Watchdog / Health file — external process monitors bot connectivity and restarts if needed
 * Whisper Invite — players whisper the bot a trigger word and automatically receive a guild invite in-game
+* Guild Sync Audit — auto-updating Discord message showing guild members without a linked Discord account and Discord members without a linked WoW character, grouped by role
 * Etc.
