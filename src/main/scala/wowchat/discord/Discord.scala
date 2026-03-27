@@ -322,8 +322,10 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
         .foreach(_.foreach(channelConfig => {
           val finalMessages = if (shouldSendDirectly(message)) {
             Seq(message)
-          } else {
+          } else if (channelConfig.showDiscordUsername) {
             Discord.splitUpMessageToWow(channelConfig.format, effectiveName, message)
+          } else {
+            Discord.splitUpMessageToWow("%message", "", message)
           }
 
           finalMessages.foreach(finalMessage => {

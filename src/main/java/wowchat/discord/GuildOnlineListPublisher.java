@@ -129,11 +129,6 @@ public final class GuildOnlineListPublisher {
 
         loadConfig();
 
-        if (channelId <= 0L) {
-            // No channel configured — feature disabled, nothing to do
-            return;
-        }
-
         System.out.println("[GuildOnlineList] Initializing. Channel ID: " + channelId
             + ", update interval: " + updateMinutes + " min.");
 
@@ -143,14 +138,16 @@ public final class GuildOnlineListPublisher {
         long initialDelaySec = 15L;
         long periodSec       = Math.max(1, updateMinutes) * 60L;
 
-        scheduler.scheduleAtFixedRate(() -> {
-            try {
-                tick();
-            } catch (Throwable t) {
-                // Log but do NOT let the exception kill the scheduled task
-                System.err.println("[GuildOnlineList] Unexpected error in update tick: " + t.getMessage());
-            }
-        }, initialDelaySec, periodSec, TimeUnit.SECONDS);
+        // Only schedule online list updates if a channel is configured
+        if (channelId > 0L) {
+            scheduler.scheduleAtFixedRate(() -> {
+                try {
+                    tick();
+                } catch (Throwable t) {
+                    System.err.println("[GuildOnlineList] Unexpected error in update tick: " + t.getMessage());
+                }
+            }, initialDelaySec, periodSec, TimeUnit.SECONDS);
+        }
 
         // Health file writer — runs every 30s regardless of guild list update interval
         scheduler.scheduleAtFixedRate(() -> {
@@ -540,6 +537,9 @@ public final class GuildOnlineListPublisher {
         // Register DM auto-reply handler
         String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
         DiscordDMHandler.register(configFile);
+
+        // Initialize whisper invite handler
+        WhisperInviteHandler.init();
     }
 
     // -------------------------------------------------------------------------

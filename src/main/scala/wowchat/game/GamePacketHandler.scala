@@ -176,7 +176,46 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     Packet(CMSG_MESSAGECHAT, out)
   }
 
-  override def sendNotification(message: String): Unit = {
+  def sendCommand(command: String): Unit = {
+    sendMessageToWow(ChatEvents.CHAT_MSG_GUILD, command, None)
+  }
+
+  def sendGuildInvite(playerName: String): Unit = {
+    logger.info(s"[WhisperInvite] Sending guild invite to: $playerName")
+    ctx.fold(logger.error("Cannot send guild invite! Not connected to WoW!"))(ctx => {
+      val out = PooledByteBufAllocator.DEFAULT.buffer(64)
+      out.writeBytes(playerName.getBytes("UTF-8"))
+      out.writeByte(0)
+      ctx.writeAndFlush(Packet(CMSG_GUILD_INVITE, out))
+    })
+  }
+
+  private def handle_SMSG_GUILD_INVITE(msg: Packet): Unit = {
+    // Bot received a guild invite — ignore silently
+  }
+
+  private def handle_SMSG_GUILD_COMMAND_RESULT(msg: Packet): Unit = {
+    try {
+      val command = msg.byteBuf.readIntLE()
+      // read null-terminated name string
+      val nameBytes = new scala.collection.mutable.ArrayBuffer[Byte]()
+      var b = msg.byteBuf.readByte()
+      while (b != 0) { nameBytes += b; b = msg.byteBuf.readByte() }
+      val name = new String(nameBytes.toArray, "UTF-8")
+      val result = msg.byteBuf.readIntLE()
+      result match {
+        case 0 => logger.info(s"[WhisperInvite] Guild invite sent successfully to: $name")
+        case 2 => logger.warn(s"[WhisperInvite] Guild invite failed: $name is already in a guild")
+        case 3 => logger.warn(s"[WhisperInvite] Guild invite failed: $name is already invited")
+        case 5 => logger.warn(s"[WhisperInvite] Guild invite failed: player $name not found")
+        case r => logger.warn(s"[WhisperInvite] Guild invite result for $name: code $r")
+      }
+    } catch {
+      case e: Exception => logger.warn(s"[WhisperInvite] Could not parse SMSG_GUILD_COMMAND_RESULT: ${e.getMessage}")
+    }
+  }
+
+  def sendNotification(message: String): Unit = {
     sendMessageToWow(ChatEvents.CHAT_MSG_GUILD, message, None)
   }
 
@@ -248,6 +287,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       case SMSG_GUILD_EVENT => handle_SMSG_GUILD_EVENT(msg)
       case SMSG_GUILD_ROSTER => handle_SMSG_GUILD_ROSTER(msg)
       case SMSG_MESSAGECHAT => handle_SMSG_MESSAGECHAT(msg)
+      case SMSG_GUILD_INVITE => handle_SMSG_GUILD_INVITE(msg)
+      case SMSG_GUILD_COMMAND_RESULT => handle_SMSG_GUILD_COMMAND_RESULT(msg)
       case SMSG_CHANNEL_NOTIFY => handle_SMSG_CHANNEL_NOTIFY(msg)
       case SMSG_NOTIFICATION => handle_SMSG_NOTIFICATION(msg)
       case SMSG_WHO => handle_SMSG_WHO(msg)
@@ -257,6 +298,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       case SMSG_WARDEN_DATA => handle_SMSG_WARDEN_DATA(msg)
 
       case unhandled =>
+        if (unhandled != 0x1F4 && unhandled != 0x4E2 && unhandled != 0xDD) {
+          logger.debug(s"Unhandled packet: 0x${unhandled.toHexString.toUpperCase}")
+        }
     }
   }
 
@@ -329,6 +373,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     if (nameQueryMessage.race.nonEmpty) {
       wowchat.discord.GuildOnlineListPublisher.cacheRace(nameQueryMessage.name, nameQueryMessage.race)
     }
+
+    // Process any pending whisper invites for this guid
+    wowchat.discord.WhisperInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
 
     queuedChatMessages
       .remove(nameQueryMessage.guid)
@@ -572,6 +619,17 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
 
   protected def handle_SMSG_MESSAGECHAT(msg: Packet): Unit = {
     logger.debug(s"RECV CHAT: ${ByteUtils.toHexString(msg.byteBuf, true, true)}")
+
+    // Peek at message type — if it's a whisper, run invite handler first (resets buffer after)
+    msg.byteBuf.markReaderIndex()
+    val tp = msg.byteBuf.readByte
+    msg.byteBuf.resetReaderIndex()
+
+    if (tp == ChatEvents.CHAT_MSG_WHISPER) {
+      wowchat.discord.WhisperInviteHandler.handleIfWhisper(msg, this)
+      // buffer is reset by handleIfWhisper, continue with normal processing
+    }
+
     parseChatMessage(msg).foreach(sendChatMessage)
   }
 
