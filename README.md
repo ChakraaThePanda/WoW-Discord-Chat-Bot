@@ -10,4 +10,5 @@ Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added fun
 * Bot Status Rotation — cycles through custom status messages on a timer with {online-members} token
 * show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
 * Watchdog / Health file — external process monitors bot connectivity and restarts if needed
+* Whisper Invite — players whisper the bot a trigger word and automatically receive a guild invite in-game
 * Etc.
