@@ -104,7 +104,6 @@ public final class GuildOnlineListPublisher {
     // Runtime state
     private static volatile boolean started     = false;
     private static volatile String  messageId   = null;
-    private static volatile String  lastPayload = null;
 
     // Cached JDA reference — extracted once via reflection, reused forever after
     // NOTE: If this is null after the first successful extraction it means something
@@ -272,23 +271,13 @@ public final class GuildOnlineListPublisher {
         List<String> onlineNames = getOnlineNames();
         Collections.sort(onlineNames, String.CASE_INSENSITIVE_ORDER);
 
-        String payload = onlineNames.isEmpty() ? "No Guild Members Online" : String.join("\n", onlineNames);
+        String listContent = onlineNames.isEmpty() ? "No Guild Members Online" : String.join("\n", onlineNames);
+        String payload = listContent
+            + "\n\n*Last updated: <t:" + (System.currentTimeMillis() / 1000L) + ":R>*";
 
         // Find our existing message if we don't have its ID cached
         if (messageId == null) {
             messageId = findExistingMessageId(channel);
-        }
-
-        // Skip the API call if nothing changed and message still exists
-        if (payload.equals(lastPayload) && messageId != null) {
-            boolean stillExists = true;
-            try {
-                channel.retrieveMessageById(messageId).complete();
-            } catch (Throwable t) {
-                stillExists = false;
-            }
-            if (stillExists) return;
-            messageId = null; // Message was deleted — will recreate below
         }
 
         String fullContent = payload + MARKER;
@@ -297,21 +286,19 @@ public final class GuildOnlineListPublisher {
             // Post a new message
             try {
                 Message sent = channel.sendMessage(fullContent).complete();
-                messageId   = sent.getId();
-                lastPayload = payload;
+                messageId = sent.getId();
             } catch (Throwable t) {
                 System.err.println("[GuildOnlineList] Failed to send message: " + t.getMessage());
             }
         } else {
             // Edit the existing message
             try {
+                // Edit every tick so timestamp stays fresh
                 channel.editMessageById(messageId, fullContent).complete();
-                lastPayload = payload;
             } catch (Throwable t) {
                 // Message may have been deleted — reset and retry next tick
                 System.err.println("[GuildOnlineList] Failed to edit message (will retry): " + t.getMessage());
-                messageId   = null;
-                lastPayload = null;
+                messageId = null;
             }
         }
     }
