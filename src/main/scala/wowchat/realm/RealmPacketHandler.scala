@@ -229,9 +229,10 @@ class RealmPacketHandler(realmConnectionCallback: RealmConnectionCallback)
       }
 
     if (realms.isEmpty) {
-      logger.error(s"Realm $configRealm not found!")
+      logger.error(s"Realm $configRealm not found! Will retry in a moment...")
       logger.error(s"${parsedRealmList.length} possible realms:")
       parsedRealmList.foreach(realm => logger.error(realm.name))
+      realmConnectionCallback.disconnected
     } else if (realms.length > 1) {
       logger.error("Too many realms returned. Something is very wrong! This should never happen.")
     } else {
