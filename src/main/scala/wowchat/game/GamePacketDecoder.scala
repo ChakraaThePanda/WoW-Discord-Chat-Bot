@@ -29,6 +29,8 @@ class GamePacketDecoder extends ByteToMessageDecoder with GamePackets with Stric
       } else {
         parseGameHeader(in)
       }
+      // -1 signals that the decoder needs more bytes (e.g. WotLK large packet extra byte)
+      if (tuple._1 == -1) return
       id = tuple._1
       size = tuple._2
     }

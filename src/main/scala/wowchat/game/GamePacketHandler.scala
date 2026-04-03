@@ -56,6 +56,11 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   private var wardenHandler: Option[WardenHandler] = None
   private var receivedCharEnum = false
 
+  override def exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable): Unit = {
+    logger.error(s"Unhandled exception in pipeline: ${cause.getMessage}. Closing channel to trigger reconnect.")
+    ctx.close()
+  }
+
   override def channelInactive(ctx: ChannelHandlerContext): Unit = {
     executorService.shutdown()
     this.ctx = None
