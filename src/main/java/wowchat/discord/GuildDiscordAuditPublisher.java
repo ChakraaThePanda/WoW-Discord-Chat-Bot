@@ -174,7 +174,7 @@ public final class GuildDiscordAuditPublisher {
         StringBuilder sb = new StringBuilder();
         sb.append("## Guild Sync Audit\n");
 
-        sb.append("### [WoW] Guild Members that aren't in the Discord");
+        sb.append("### [WoW] Guild Members that aren't linked to the Discord");
         sb.append(" (").append(unlinkdWoW.size()).append(")");
         sb.append("\n");
         if (unlinkdWoW.isEmpty()) {
