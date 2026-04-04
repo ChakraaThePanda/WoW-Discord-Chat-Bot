@@ -590,10 +590,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     guildRoster.clear
     guildRoster ++= parseGuildRoster(msg)
     updateGuildiesOnline
-    // Fire name queries for all online members to pre-populate race cache
-    guildRoster.foreach { case (guid, member) =>
-      if (member.isOnline) sendNameQuery(guid)
-    }
+    // Fire name queries for all members to pre-populate race cache (online and offline)
+    guildRoster.foreach { case (guid, _) => sendNameQuery(guid) }
   }
 
   protected def parseGuildRoster(msg: Packet): Map[Long, GuildMember] = {

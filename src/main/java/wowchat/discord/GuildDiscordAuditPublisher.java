@@ -4,10 +4,12 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
 import com.typesafe.config.ConfigResolveOptions;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -18,6 +20,7 @@ import wowchat.game.GamePacketHandler;
 import wowchat.game.GuildMember;
 import wowchat.game.Player;
 
+import java.awt.Color;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
@@ -27,29 +30,25 @@ import java.util.concurrent.TimeUnit;
 /**
  * GuildDiscordAuditPublisher
  *
- * Posts and continuously updates a single Discord message with two audit panels:
+ * Posts and continuously updates two Discord messages in the same channel:
  *
- *   Panel 1 - WoW members missing a Discord link
- *     Guild members whose officer note is empty, not a valid snowflake ID,
- *     or doesn't match any member in the Discord server.
- *     Sorted alphabetically by character name.
- *     Respects guildOnlineListIgnore (bot character excluded).
+ *   Message 1 - Audit:
+ *     Panel 1: WoW members without a linked Discord account
+ *     Panel 2: Discord members (by role) without a linked WoW character
  *
- *   Panel 2 - Discord members missing a WoW link
- *     Discord members who have one of the configured audit roles but whose
- *     user ID is not found in any guild member's officer note.
- *     Grouped by role (in config order), alphabetically within each group.
+ *   Message 2 - Guild Roster (embed):
+ *     All guild members grouped by Discord user (via officer note).
+ *     Unlinked characters listed in a separate section at the bottom.
  *
  * Config keys:
- *   guildAuditChannelId  - Discord channel ID to post the message in (0 = disabled)
- *   guildAuditRoleIds    - list of Discord role IDs to check for Panel 2
- *
- * Update interval: reuses discordFeaturesUpdateMinutes.
- * Bot exclusion:   reuses guildOnlineListIgnore.
+ *   guildAuditChannelId  - Discord channel ID
+ *   guildAuditRoleIds    - list of Discord role IDs for Panel 2
  */
 public final class GuildDiscordAuditPublisher {
 
-    private static final String MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
+    // Separate markers so we can distinguish the two messages in channel history
+    private static final String AUDIT_MARKER  = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
+    private static final String ROSTER_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
 
     // Config
     private static volatile long         channelId     = 0L;
@@ -57,16 +56,13 @@ public final class GuildDiscordAuditPublisher {
     private static volatile Set<String>  ignoreLower   = Collections.emptySet();
     private static volatile List<String> auditRoleIds  = Collections.emptyList();
 
-    // Runtime state
-    private static volatile boolean started     = false;
-    private static volatile String  messageId   = null;
-    private static volatile String  lastPayload = null;
+    // Runtime state - audit message
+    private static volatile boolean started        = false;
+    private static volatile String  auditMessageId = null;
+    // Runtime state - roster messages (one per page)
+    private static final List<String> rosterMessageIds = new ArrayList<>();
 
     private GuildDiscordAuditPublisher() {}
-
-    // -------------------------------------------------------------------------
-    // Init - called once from WoWChat.main(), after Discord connects
-    // -------------------------------------------------------------------------
 
     public static synchronized void init() {
         if (started) return;
@@ -74,7 +70,7 @@ public final class GuildDiscordAuditPublisher {
 
         loadConfig();
 
-        if (channelId == 0L) return; // Disabled - no channel configured
+        if (channelId == 0L) return;
 
         System.out.println("[GuildAudit] Initializing. Channel ID: " + channelId
             + ", update interval: " + updateMinutes + " min.");
@@ -93,10 +89,6 @@ public final class GuildDiscordAuditPublisher {
         }, 20L, periodSec, TimeUnit.SECONDS);
     }
 
-    // -------------------------------------------------------------------------
-    // Main update tick - builds the message and posts/edits it
-    // -------------------------------------------------------------------------
-
     private static void tick() {
         JDA jda = GuildOnlineListPublisher.getJda();
         if (jda == null) return;
@@ -107,16 +99,14 @@ public final class GuildDiscordAuditPublisher {
             return;
         }
 
-        // Get guild member roster from WoW
-        Map<String, String> rosterNotes = getGuildRosterNotes(); // charName -> officerNote
-        if (rosterNotes == null) return; // Game not ready yet
+        Map<String, String> rosterNotes = getGuildRosterNotes();
+        if (rosterNotes == null) return;
 
-        // Get Discord guild
         List<Guild> guilds = jda.getGuilds();
         if (guilds.isEmpty()) return;
         Guild discordGuild = guilds.get(0);
 
-        // Build set of all officer note IDs that are valid Discord snowflakes
+        // Build set of all linked Discord IDs from officer notes
         Set<String> linkedDiscordIds = new HashSet<>();
         for (String note : rosterNotes.values()) {
             String id = extractDiscordId(note);
@@ -130,19 +120,13 @@ public final class GuildDiscordAuditPublisher {
             String note     = entry.getValue();
             if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
             String id = extractDiscordId(note);
-            if (id == null) {
-                // No valid ID in officer note
+            if (id == null || discordGuild.getMemberById(id) == null) {
                 unlinkdWoW.add(charName);
-            } else {
-                // Valid ID but user not in Discord server
-                Member m = discordGuild.getMemberById(id);
-                if (m == null) unlinkdWoW.add(charName);
             }
         }
         Collections.sort(unlinkdWoW, String.CASE_INSENSITIVE_ORDER);
 
         // --- Panel 2: Discord members missing a WoW link, grouped by role ---
-        // Build map of roleId -> list of member display names not in roster
         StringBuilder panel2 = new StringBuilder();
         for (String roleId : auditRoleIds) {
             Role role = discordGuild.getRoleById(roleId);
@@ -152,8 +136,7 @@ public final class GuildDiscordAuditPublisher {
             List<String> unlinkedDiscord = new ArrayList<>();
             for (Member member : membersWithRole) {
                 if (member.getUser().isBot()) continue;
-                String uid = member.getUser().getId();
-                if (!linkedDiscordIds.contains(uid)) {
+                if (!linkedDiscordIds.contains(member.getUser().getId())) {
                     unlinkedDiscord.add(member.getEffectiveName());
                 }
             }
@@ -170,61 +153,214 @@ public final class GuildDiscordAuditPublisher {
             }
         }
 
-        // Compose full message
-        StringBuilder sb = new StringBuilder();
-        sb.append("## Guild Sync Audit\n");
-
-        sb.append("### [WoW] Guild Members that aren't linked to the Discord");
-        sb.append(" (").append(unlinkdWoW.size()).append(")");
-        sb.append("\n");
-        if (unlinkdWoW.isEmpty()) {
-            sb.append("All guild members have a linked Discord ID.\n");
-        } else {
-            for (String name : unlinkdWoW) {
-                sb.append("- ").append(name).append("\n");
-            }
-        }
-
-        sb.append("### [Discord] Members that aren't in the Guild\n");
+        // --- Build audit message ---
+        // Build audit embed description
+        StringBuilder auditDesc = new StringBuilder();
+        auditDesc.append("### Discord Members that aren't linked to any characters in the Guild\n");
         if (auditRoleIds.isEmpty()) {
-            sb.append("No audit roles configured (guildAuditRoleIds).");
+            auditDesc.append("No audit roles configured (guildAuditRoleIds).");
         } else if (panel2.length() == 0) {
-            sb.append("None of the configured roles were found in this Discord server.");
+            auditDesc.append("None of the configured roles were found in this Discord server.");
         } else {
-            sb.append(panel2);
+            auditDesc.append(panel2);
         }
 
-        // Timestamp
-        sb.append("\n\n*Last updated: <t:")
-          .append(System.currentTimeMillis() / 1000L)
-          .append(":R>*");
+        String auditDescStr = auditDesc.toString();
+        if (auditDescStr.length() > 4000) auditDescStr = auditDescStr.substring(0, 3997) + "...";
 
-        String payload = sb.toString();
+        MessageEmbed auditEmbed = new EmbedBuilder()
+            .setTitle("Guild Sync Audit")
+            .setDescription(auditDescStr)
+            .setColor(Color.decode("#2b2d31"))
+            .setFooter("Last updated: " + new java.util.Date())
+            .build();
 
-        // Find existing message if needed
-        if (messageId == null) {
-            messageId = findExistingMessageId(channel);
+        postOrEditEmbed(channel, auditEmbed, AUDIT_MARKER,
+            id -> auditMessageId = id, () -> auditMessageId, id -> auditMessageId = null);
+
+        // --- Build roster embed ---
+        postOrEditRoster(channel, discordGuild, rosterNotes);
+    }
+
+    // -------------------------------------------------------------------------
+    // Format a single character entry: "Name (Level X Race Class)"
+    // -------------------------------------------------------------------------
+
+    private static String getClassName(byte charClass) {
+        switch (charClass) {
+            case 0x01: return "Warrior";
+            case 0x02: return "Paladin";
+            case 0x03: return "Hunter";
+            case 0x04: return "Rogue";
+            case 0x05: return "Priest";
+            case 0x06: return "Death Knight";
+            case 0x07: return "Shaman";
+            case 0x08: return "Mage";
+            case 0x09: return "Warlock";
+            case 0x0A: return "Monk";
+            case 0x0B: return "Druid";
+            default:   return "Unknown";
+        }
+    }
+
+    private static String formatCharEntry(String charName, scala.collection.Map<Object, GuildMember> roster) {
+        scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
+        while (it.hasNext()) {
+            GuildMember m = it.next();
+            if (m.name().equalsIgnoreCase(charName)) {
+                String race = GuildOnlineListPublisher.getRace(charName);
+                String cls = getClassName(m.charClass());
+                int level = m.level() & 0xFF; // byte to unsigned int
+                String attrs = "Level " + level
+                    + (race.isEmpty() ? "" : " " + race.trim())
+                    + " " + cls;
+                return charName + " (" + attrs + ")";
+            }
+        }
+        return charName;
+    }
+
+    // -------------------------------------------------------------------------
+    // Guild Roster embed
+    // -------------------------------------------------------------------------
+
+    private static void postOrEditRoster(TextChannel channel, Guild discordGuild, Map<String, String> rosterNotes) {
+        // Get full roster for attribute lookup
+        scala.collection.Map<Object, GuildMember> finalRoster = null;
+        try {
+            Option<wowchat.game.GameCommandHandler> gameOpt = Global$.MODULE$.game();
+            if (gameOpt != null && !gameOpt.isEmpty() && gameOpt.get() instanceof wowchat.game.GamePacketHandler) {
+                finalRoster = ((wowchat.game.GamePacketHandler) gameOpt.get()).guildRoster();
+            }
+        } catch (Throwable ignored) {}
+
+        // Build list of user blocks: each block is one Discord user + their characters
+        // A block is a self-contained string that must never be split across pages
+        List<String> blocks = new ArrayList<>();
+
+        // Sort all characters alphabetically
+        List<String> sortedChars = new ArrayList<>(rosterNotes.keySet());
+        Collections.sort(sortedChars, String.CASE_INSENSITIVE_ORDER);
+
+        // Group by Discord ID, preserving alphabetical order within each group
+        Map<String, List<String>> byDiscordId = new LinkedHashMap<>();
+        List<String> unlinked = new ArrayList<>();
+
+        for (String charName : sortedChars) {
+            if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
+            String note = rosterNotes.get(charName);
+            String discordId = extractDiscordId(note);
+            if (discordId != null && discordGuild.getMemberById(discordId) != null) {
+                byDiscordId.computeIfAbsent(discordId, k -> new ArrayList<>()).add(charName);
+            } else {
+                unlinked.add(charName);
+            }
         }
 
-        // Always edit to refresh the timestamp, but skip if content unchanged and message exists
-        String fullContent = payload + MARKER;
+        // Sort linked users by Discord display name
+        List<Map.Entry<String, List<String>>> linkedEntries = new ArrayList<>(byDiscordId.entrySet());
+        linkedEntries.sort((a, b) -> {
+            Member ma = discordGuild.getMemberById(a.getKey());
+            Member mb = discordGuild.getMemberById(b.getKey());
+            String na = ma != null ? ma.getEffectiveName() : a.getKey();
+            String nb = mb != null ? mb.getEffectiveName() : b.getKey();
+            return na.compareToIgnoreCase(nb);
+        });
 
-        if (messageId == null) {
+        // Build one block per linked user
+        for (Map.Entry<String, List<String>> entry : linkedEntries) {
+            StringBuilder block = new StringBuilder();
+            block.append("<@").append(entry.getKey()).append(">\n");
+            for (String charName : entry.getValue()) {
+                block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
+            }
+            blocks.add(block.toString());
+        }
+
+        // Unlinked section as one block
+        if (!unlinked.isEmpty()) {
+            StringBuilder block = new StringBuilder();
+            block.append("**Unlinked Characters**\n");
+            for (String charName : unlinked) {
+                block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
+            }
+            blocks.add(block.toString());
+        }
+
+        // Pack blocks into pages - never split a user block across pages
+        List<String> pages = new ArrayList<>();
+        StringBuilder currentPage = new StringBuilder();
+        final int PAGE_LIMIT = 3800;
+
+        for (String block : blocks) {
+            if (currentPage.length() + block.length() > PAGE_LIMIT && currentPage.length() > 0) {
+                pages.add(currentPage.toString());
+                currentPage = new StringBuilder();
+            }
+            currentPage.append(block);
+        }
+        if (currentPage.length() > 0) pages.add(currentPage.toString());
+        if (pages.isEmpty()) pages.add("No guild members found.");
+
+        // Grow or shrink rosterMessageIds list to match page count
+        while (rosterMessageIds.size() < pages.size()) rosterMessageIds.add(null);
+        while (rosterMessageIds.size() > pages.size()) {
+            // Delete extra messages that are no longer needed
+            String extraId = rosterMessageIds.remove(rosterMessageIds.size() - 1);
+            if (extraId != null) {
+                try { channel.deleteMessageById(extraId).complete(); }
+                catch (Throwable ignored) {}
+            }
+        }
+
+        // Post or edit each page
+        for (int i = 0; i < pages.size(); i++) {
+            String title = pages.size() > 1 ? "Guild Roster (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster";
+            MessageEmbed embed = new EmbedBuilder()
+                .setTitle(title)
+                .setDescription(pages.get(i))
+                .setColor(Color.decode("#2b2d31"))
+                .setFooter(i == pages.size() - 1 ? "Last updated: " + new java.util.Date() : null)
+                .build();
+
+            final int idx = i;
+            postOrEditEmbed(channel, embed, ROSTER_MARKER,
+                id -> rosterMessageIds.set(idx, id),
+                () -> rosterMessageIds.get(idx),
+                id -> rosterMessageIds.set(idx, null));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Post or edit an embed message
+    // -------------------------------------------------------------------------
+
+    private interface Setter { void set(String id); }
+    private interface Getter { String get(); }
+
+    private static void postOrEditEmbed(TextChannel channel, MessageEmbed embed, String marker,
+                                        Setter setId, Getter getId, Setter clearId) {
+        if (getId.get() == null) {
+            setId.set(findExistingMessageId(channel, marker));
+        }
+
+        if (getId.get() == null) {
             try {
-                Message sent = channel.sendMessage(fullContent).complete();
-                messageId   = sent.getId();
-                lastPayload = payload;
+                Message sent = channel.sendMessageEmbeds(embed)
+                    .setContent(marker)
+                    .complete();
+                setId.set(sent.getId());
             } catch (Throwable t) {
-                System.err.println("[GuildAudit] Failed to send message: " + t.getMessage());
+                System.err.println("[GuildAudit] Failed to send embed: " + t.getMessage());
             }
         } else {
             try {
-                channel.editMessageById(messageId, fullContent).complete();
-                lastPayload = payload;
+                channel.editMessageById(getId.get(), marker)
+                    .setEmbeds(embed)
+                    .complete();
             } catch (Throwable t) {
-                System.err.println("[GuildAudit] Failed to edit message (will retry): " + t.getMessage());
-                messageId   = null;
-                lastPayload = null;
+                System.err.println("[GuildAudit] Failed to edit embed (will retry): " + t.getMessage());
+                clearId.set(null);
             }
         }
     }
@@ -248,9 +384,8 @@ public final class GuildDiscordAuditPublisher {
             scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
             while (it.hasNext()) {
                 GuildMember p = it.next();
-                String name = p.name();
                 String note = p.officerNote() != null ? p.officerNote().trim() : "";
-                result.put(name, note);
+                result.put(p.name(), note);
             }
             return result;
         } catch (Throwable t) {
@@ -260,9 +395,7 @@ public final class GuildDiscordAuditPublisher {
     }
 
     // -------------------------------------------------------------------------
-    // Extract a valid Discord snowflake ID from an officer note string.
-    // Returns null if the note doesn't contain a valid ID.
-    // A Discord snowflake is a 17-19 digit numeric string.
+    // Extract a valid Discord snowflake ID (17-19 digits) from an officer note
     // -------------------------------------------------------------------------
 
     private static String extractDiscordId(String note) {
@@ -276,7 +409,7 @@ public final class GuildDiscordAuditPublisher {
     // Find our previously posted message in channel history by marker
     // -------------------------------------------------------------------------
 
-    private static String findExistingMessageId(TextChannel channel) {
+    private static String findExistingMessageId(TextChannel channel, String marker) {
         try {
             List<Message> history = channel.getHistory().retrievePast(100).complete();
             if (history == null) return null;
@@ -284,7 +417,7 @@ public final class GuildDiscordAuditPublisher {
                 User author = msg.getAuthor();
                 if (author == null || !author.isBot()) continue;
                 String content = msg.getContentRaw();
-                if (content != null && content.endsWith(MARKER)) {
+                if (content != null && content.endsWith(marker) && !content.endsWith(marker + "\u200b")) {
                     return msg.getId();
                 }
             }
@@ -304,17 +437,14 @@ public final class GuildDiscordAuditPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            // Channel ID
             channelId = 0L;
             try {
                 channelId = config.getLong("guildAuditChannelId");
             } catch (ConfigException.WrongType e) {
-                try {
-                    channelId = Long.parseLong(config.getString("guildAuditChannelId").trim());
-                } catch (Throwable ignored) {}
+                try { channelId = Long.parseLong(config.getString("guildAuditChannelId").trim()); }
+                catch (Throwable ignored) {}
             } catch (ConfigException.Missing ignored) {}
 
-            // Update interval - shared with GuildOnlineList
             updateMinutes = 5;
             try {
                 if (config.hasPath("discordFeaturesUpdateMinutes")) {
@@ -323,22 +453,17 @@ public final class GuildDiscordAuditPublisher {
                 if (updateMinutes < 1) updateMinutes = 1;
             } catch (ConfigException ignored) {}
 
-            // Ignore list - shared with GuildOnlineList
             Set<String> ignoreSet = new HashSet<>();
             try {
                 if (config.hasPath("guildOnlineListIgnore")) {
                     for (String name : config.getStringList("guildOnlineListIgnore")) {
-                        if (name != null && !name.trim().isEmpty()) {
+                        if (name != null && !name.trim().isEmpty())
                             ignoreSet.add(name.trim().toLowerCase(Locale.ROOT));
-                        }
                     }
                 }
             } catch (Throwable ignored) {}
-            ignoreLower = ignoreSet.isEmpty()
-                ? Collections.emptySet()
-                : Collections.unmodifiableSet(ignoreSet);
+            ignoreLower = ignoreSet.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(ignoreSet);
 
-            // Audit role IDs
             List<String> roleList = new ArrayList<>();
             try {
                 if (config.hasPath("guildAuditRoleIds")) {
@@ -347,9 +472,7 @@ public final class GuildDiscordAuditPublisher {
                     }
                 }
             } catch (Throwable ignored) {}
-            auditRoleIds = roleList.isEmpty()
-                ? Collections.emptyList()
-                : Collections.unmodifiableList(roleList);
+            auditRoleIds = roleList.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(roleList);
 
         } catch (Throwable t) {
             System.err.println("[GuildAudit] Failed to load config: " + t.getMessage());

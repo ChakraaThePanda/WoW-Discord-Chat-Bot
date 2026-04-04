@@ -1,5 +1,5 @@
 /*
- * GuildOnlineListPublisher.java — hardened version.
+ * GuildOnlineListPublisher.java - hardened version.
  *
  * CHANGES FROM ORIGINAL GPT VERSION:
  *
@@ -37,7 +37,10 @@ package wowchat.discord;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.MessageEmbed;
+import java.awt.Color;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -46,6 +49,7 @@ import wowchat.common.Global$;
 import wowchat.discord.DiscordDMHandler;
 import wowchat.game.GameCommandHandler;
 import wowchat.game.GamePacketHandler;
+import wowchat.game.GuildMember;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -59,7 +63,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class GuildOnlineListPublisher {
 
     // -------------------------------------------------------------------------
-    // Race cache — populated from SMSG_NAME_QUERY responses via cacheRace()
+    // Race cache - populated from SMSG_NAME_QUERY responses via cacheRace()
     // -------------------------------------------------------------------------
     private static final java.util.concurrent.ConcurrentHashMap<String, String> raceCache =
         new java.util.concurrent.ConcurrentHashMap<>();
@@ -70,7 +74,7 @@ public final class GuildOnlineListPublisher {
         }
     }
 
-    private static String getRace(String name) {
+    static String getRace(String name) {
         if (name == null || name.isEmpty()) return "";
         String race = raceCache.get(name.toLowerCase(Locale.ROOT));
         return race != null ? race + " " : "";
@@ -79,17 +83,17 @@ public final class GuildOnlineListPublisher {
     /**
      * Invisible Unicode marker appended to our message so we can identify it
      * in channel history without affecting visible content.
-     * 10 zero-width spaces — same as original.
+     * 10 zero-width spaces - same as original.
      */
     private static final String MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
 
-    /** Health file path — Watchdog reads this to know WoW packets are still flowing. */
+    /** Health file path - Watchdog reads this to know WoW packets are still flowing. */
     private static final String HEALTH_FILE = "watchdog.health";
 
     /** How often we write the health file (seconds). */
     private static final int HEALTH_WRITE_INTERVAL_SEC = 30;
 
-    // Config values — loaded once at init()
+    // Config values - loaded once at init()
     private static volatile long    channelId     = 0L;
     private static volatile int     updateMinutes = 5;
     private static volatile Set<String> ignoreLower = Collections.emptySet();
@@ -105,7 +109,7 @@ public final class GuildOnlineListPublisher {
     private static volatile boolean started     = false;
     private static volatile String  messageId   = null;
 
-    // Cached JDA reference — extracted once via reflection, reused forever after
+    // Cached JDA reference - extracted once via reflection, reused forever after
     // NOTE: If this is null after the first successful extraction it means something
     // is seriously wrong with the Discord class structure.
     private static volatile JDA cachedJda = null;
@@ -115,7 +119,7 @@ public final class GuildOnlineListPublisher {
     private GuildOnlineListPublisher() {}
 
     // -------------------------------------------------------------------------
-    // Init — called once from WoWChat.main()
+    // Init - called once from WoWChat.main()
     // -------------------------------------------------------------------------
 
     public static int getUpdateMinutes() {
@@ -148,7 +152,7 @@ public final class GuildOnlineListPublisher {
             }, initialDelaySec, periodSec, TimeUnit.SECONDS);
         }
 
-        // Health file writer — runs every 30s regardless of guild list update interval
+        // Health file writer - runs every 30s regardless of guild list update interval
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 writeHealthFile();
@@ -157,7 +161,7 @@ public final class GuildOnlineListPublisher {
             }
         }, 10L, HEALTH_WRITE_INTERVAL_SEC, TimeUnit.SECONDS);
 
-        // Status rotation — only scheduled if messages are configured
+        // Status rotation - only scheduled if messages are configured
         rotationActive = !statusMessages.isEmpty();
         if (!statusMessages.isEmpty()) {
             long rotatePeriod = Math.max(5, statusRotateSecs);
@@ -172,7 +176,7 @@ public final class GuildOnlineListPublisher {
     }
 
     // -------------------------------------------------------------------------
-    // Health file writer — called every 30s by the scheduler
+    // Health file writer - called every 30s by the scheduler
     //
     // Writes the timestamp of the last WoW packet received to watchdog.health.
     // The Watchdog reads this file to determine if the WoW connection is alive.
@@ -180,7 +184,7 @@ public final class GuildOnlineListPublisher {
     // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
-    // Status rotation — cycles through guildStatusMessages on a fixed timer.
+    // Status rotation - cycles through guildStatusMessages on a fixed timer.
     // Replaces {online-members} with "N Guild Member" or "N Guild Members" (pluralized).
     // Calls Discord.changeGuildStatus() directly, same as the bot does internally.
     // -------------------------------------------------------------------------
@@ -192,7 +196,7 @@ public final class GuildOnlineListPublisher {
         String template = statusMessages.get(statusIndex % statusMessages.size());
         statusIndex++;
 
-        // Resolve {online-members} if present — returns "1 Guild Member" or "N Guild Members"
+        // Resolve {online-members} if present - returns "1 Guild Member" or "N Guild Members"
         String message = template;
         if (message.contains("{online-members}")) {
             int count = getOnlineCount();
@@ -216,13 +220,13 @@ public final class GuildOnlineListPublisher {
             GameCommandHandler handler = gameOpt.get();
             if (!(handler instanceof GamePacketHandler)) return 0;
             // buildGuildiesOnline() excludes the bot character, same as ?online
-            // getGuildiesOnlineMessage(true) returns "N Guild Members online" — parse the count from there
+            // getGuildiesOnlineMessage(true) returns "N Guild Members online" - parse the count from there
             String msg = ((GamePacketHandler) handler).getGuildiesOnlineMessage(true);
             // format: "N Guild Members online" or "1 Guild Member online"
             String[] parts = msg.split(" ");
             if (parts.length > 0) return Integer.parseInt(parts[0]);
         } catch (Throwable t) {
-            // ignore — return 0 safely
+            // ignore - return 0 safely
         }
         return 0;
     }
@@ -271,32 +275,35 @@ public final class GuildOnlineListPublisher {
         List<String> onlineNames = getOnlineNames();
         Collections.sort(onlineNames, String.CASE_INSENSITIVE_ORDER);
 
-        String listContent = onlineNames.isEmpty() ? "No Guild Members Online" : String.join("\n", onlineNames);
-        String payload = listContent
-            + "\n\n*Last updated: <t:" + (System.currentTimeMillis() / 1000L) + ":R>*";
+        String listContent = onlineNames.isEmpty() ? "No Guild Members currently online." : String.join("\n", onlineNames);
+
+        MessageEmbed embed = new EmbedBuilder()
+            .setTitle("Who's Online?")
+            .setDescription(listContent)
+            .setColor(Color.decode("#2b2d31"))
+            .setFooter("Last updated: " + new java.util.Date())
+            .build();
 
         // Find our existing message if we don't have its ID cached
         if (messageId == null) {
             messageId = findExistingMessageId(channel);
         }
 
-        String fullContent = payload + MARKER;
-
         if (messageId == null) {
-            // Post a new message
             try {
-                Message sent = channel.sendMessage(fullContent).complete();
+                Message sent = channel.sendMessageEmbeds(embed)
+                    .setContent(MARKER)
+                    .complete();
                 messageId = sent.getId();
             } catch (Throwable t) {
                 System.err.println("[GuildOnlineList] Failed to send message: " + t.getMessage());
             }
         } else {
-            // Edit the existing message
             try {
-                // Edit every tick so timestamp stays fresh
-                channel.editMessageById(messageId, fullContent).complete();
+                channel.editMessageById(messageId, MARKER)
+                    .setEmbeds(embed)
+                    .complete();
             } catch (Throwable t) {
-                // Message may have been deleted — reset and retry next tick
                 System.err.println("[GuildOnlineList] Failed to edit message (will retry): " + t.getMessage());
                 messageId = null;
             }
@@ -312,8 +319,8 @@ public final class GuildOnlineListPublisher {
     // Scala collection iterators as the rest of the bot. No reimplementation needed.
     //
     // buildGuildiesOnline() returns one of:
-    //   "Currently no Guild Members online."   — when empty (no newline)
-    //   "Currently 2 guildies online:\n        — when populated
+    //   "Currently no Guild Members online."   - when empty (no newline)
+    //   "Currently 2 guildies online:\n        - when populated
     //    Name1 (40 Warrior in Zone), Name2 (...)"
     //
     // We strip the header line, split the comma-separated entries into a List
@@ -331,7 +338,7 @@ public final class GuildOnlineListPublisher {
             String raw = ((GamePacketHandler) handler).buildGuildiesOnline();
             if (raw == null || raw.isEmpty()) return Collections.emptyList();
 
-            // No newline means "Currently no Guild Members online." — nothing to show
+            // No newline means "Currently no Guild Members online." - nothing to show
             if (!raw.contains("\n")) return Collections.emptyList();
 
             // Strip the "Currently N guildies online:\n" header, split on ", "
@@ -343,7 +350,7 @@ public final class GuildOnlineListPublisher {
             // Apply ignore list if configured
             if (!ignoreLower.isEmpty()) {
                 result.removeIf(entry -> {
-                    // entry is "Name (40 Warrior in Zone)" — extract just the name
+                    // entry is "Name (40 Warrior in Zone)" - extract just the name
                     int paren = entry.indexOf(" (");
                     String name = paren > 0 ? entry.substring(0, paren) : entry;
                     return ignoreLower.contains(name.trim().toLowerCase(Locale.ROOT));
@@ -357,13 +364,30 @@ public final class GuildOnlineListPublisher {
                 String charName = entry.substring(0, parenOpen);
                 String race = getRace(charName);
                 if (race.isEmpty()) return entry;
-                // entry is "Name (Level 40 CLASS in ZONE)" — insert race after the level number
-                int innerStart = parenOpen + 2; // skip " ("
-                // skip "Level " prefix if present
+                int innerStart = parenOpen + 2;
                 if (entry.substring(innerStart).startsWith("Level ")) innerStart += 6;
                 int spaceAfterLevel = entry.indexOf(' ', innerStart);
                 if (spaceAfterLevel < 0) return entry;
                 return entry.substring(0, spaceAfterLevel + 1) + race + entry.substring(spaceAfterLevel + 1);
+            });
+
+            // Append Discord mention if officer note contains a valid Discord ID
+            scala.collection.Map<Object, GuildMember> roster = ((GamePacketHandler) handler).guildRoster();
+            result.replaceAll(entry -> {
+                int parenOpen = entry.indexOf(" (");
+                String charName = parenOpen > 0 ? entry.substring(0, parenOpen) : entry;
+                scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
+                while (it.hasNext()) {
+                    GuildMember m = it.next();
+                    if (m.name().equalsIgnoreCase(charName.trim())) {
+                        String note = m.officerNote() != null ? m.officerNote().trim() : "";
+                        if (note.matches("\\d{17,19}")) {
+                            return entry + " (<@" + note + ">)";
+                        }
+                        break;
+                    }
+                }
+                return entry;
             });
 
             return result;
@@ -398,7 +422,7 @@ public final class GuildOnlineListPublisher {
     }
 
     // -------------------------------------------------------------------------
-    // JDA extraction via reflection — cached after first success
+    // JDA extraction via reflection - cached after first success
     //
     // WHY REFLECTION: Discord.java has a private `jda` field and no public
     // accessor. Since this is a decompiled JAR we cannot modify Discord.java
@@ -421,13 +445,13 @@ public final class GuildOnlineListPublisher {
                 Object value = field.get(discord);
 
                 if (value instanceof JDA) {
-                    cachedJda = (JDA) value; // Cache it — never reflect again
+                    cachedJda = (JDA) value; // Cache it - never reflect again
                     System.out.println("[GuildOnlineList] JDA instance found and cached via reflection.");
                     return cachedJda;
                 }
             }
 
-            // If we get here, no JDA field was found — this is a structural problem
+            // If we get here, no JDA field was found - this is a structural problem
             System.err.println("[GuildOnlineList] WARNING: Could not find JDA field in Discord class. "
                 + "Guild online list will not work. This may indicate a Discord class structure change.");
 
@@ -448,7 +472,7 @@ public final class GuildOnlineListPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            // Channel ID — try as long first, then as string
+            // Channel ID - try as long first, then as string
             channelId = 0L;
             try {
                 channelId = config.getLong("guildOnlineListChannelId");
@@ -462,7 +486,7 @@ public final class GuildOnlineListPublisher {
                 channelId = 0L;
             }
 
-            // Update interval — new key with fallback to old key for backward compatibility
+            // Update interval - new key with fallback to old key for backward compatibility
             try {
                 if (config.hasPath("discordFeaturesUpdateMinutes")) {
                     updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
@@ -530,7 +554,7 @@ public final class GuildOnlineListPublisher {
     }
 
     // -------------------------------------------------------------------------
-    // Thread factory — produces daemon threads so they don't block JVM shutdown
+    // Thread factory - produces daemon threads so they don't block JVM shutdown
     // -------------------------------------------------------------------------
 
     public static final class DaemonThreadFactory implements ThreadFactory {
