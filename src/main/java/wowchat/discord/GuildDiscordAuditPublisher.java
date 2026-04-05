@@ -270,7 +270,9 @@ public final class GuildDiscordAuditPublisher {
         // Build one block per linked user
         for (Map.Entry<String, List<String>> entry : linkedEntries) {
             StringBuilder block = new StringBuilder();
-            block.append("<@").append(entry.getKey()).append(">\n");
+            Member m = discordGuild.getMemberById(entry.getKey());
+            String displayName = m != null ? m.getEffectiveName() : entry.getKey();
+            block.append("<@").append(entry.getKey()).append("> - **").append(displayName).append("**\n");
             for (String charName : entry.getValue()) {
                 block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
             }

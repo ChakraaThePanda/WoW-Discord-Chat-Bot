@@ -75,7 +75,7 @@ class GamePacketHandlerWotLK(realmId: Int, realmName: String, sessionKey: Array[
       val raceName = GamePacketHandlerWotLK.RACE_NAMES.getOrElse(raceId, "")
       (name, charClass, raceName)
     } else {
-      logger.error(s"RECV SMSG_NAME_QUERY - Name not known for guid $guid")
+      logger.debug(s"RECV SMSG_NAME_QUERY - Name not known for guid $guid")
       ("UNKNOWN", 0xFF.toByte, "")
     }
 
