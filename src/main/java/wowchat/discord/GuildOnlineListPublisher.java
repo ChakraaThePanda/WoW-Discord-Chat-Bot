@@ -118,6 +118,8 @@ public final class GuildOnlineListPublisher {
 
     private GuildOnlineListPublisher() {}
 
+    public static boolean isEnabled() { return channelId > 0L; }
+
     // -------------------------------------------------------------------------
     // Init - called once from WoWChat.main()
     // -------------------------------------------------------------------------
@@ -275,10 +277,22 @@ public final class GuildOnlineListPublisher {
         List<String> onlineNames = getOnlineNames();
         Collections.sort(onlineNames, String.CASE_INSENSITIVE_ORDER);
 
-        String listContent = onlineNames.isEmpty() ? "No Guild Members currently online." : String.join("\n", onlineNames);
+        String listContent;
+        String title;
+        if (onlineNames.isEmpty()) {
+            listContent = "No Guild Members currently online.";
+            title = "Who's Online? (0)";
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (String name : onlineNames) {
+                sb.append("- ").append(name).append("\n");
+            }
+            listContent = sb.toString().trim();
+            title = "Who's Online? (" + onlineNames.size() + ")";
+        }
 
         MessageEmbed embed = new EmbedBuilder()
-            .setTitle("Who's Online?")
+            .setTitle(title)
             .setDescription(listContent)
             .setColor(Color.decode("#2b2d31"))
             .setFooter("Last updated: " + new java.util.Date())

@@ -374,22 +374,28 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
 
   private def handle_SMSG_NAME_QUERY(msg: Packet): Unit = {
     val nameQueryMessage = parseNameQuery(msg)
+    val unknown = nameQueryMessage.name == "UNKNOWN" || nameQueryMessage.name.isEmpty
 
-    if (nameQueryMessage.race.nonEmpty) {
-      wowchat.discord.GuildOnlineListPublisher.cacheRace(nameQueryMessage.name, nameQueryMessage.race)
-    }
+    if (!unknown) {
+      if (nameQueryMessage.race.nonEmpty) {
+        wowchat.discord.GuildOnlineListPublisher.cacheRace(nameQueryMessage.name, nameQueryMessage.race)
+      }
 
-    // Process any pending whisper invites for this guid
-    wowchat.discord.WhisperInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
+      // Process any pending whisper invites for this guid
+      wowchat.discord.WhisperInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
 
-    queuedChatMessages
-      .remove(nameQueryMessage.guid)
-      .foreach(messages => {
-        messages.foreach(message => {
-          Global.discord.sendMessageFromWow(Some(nameQueryMessage.name), message.message, message.tp, message.channel)
+      queuedChatMessages
+        .remove(nameQueryMessage.guid)
+        .foreach(messages => {
+          messages.foreach(message => {
+            Global.discord.sendMessageFromWow(Some(nameQueryMessage.name), message.message, message.tp, message.channel)
+          })
+          playerRoster += nameQueryMessage.guid -> Player(nameQueryMessage.name, nameQueryMessage.charClass)
         })
-        playerRoster += nameQueryMessage.guid -> Player(nameQueryMessage.name, nameQueryMessage.charClass)
-    })
+    } else {
+      // Name not known — discard any queued messages for this guid to prevent memory leak
+      queuedChatMessages.remove(nameQueryMessage.guid)
+    }
   }
 
   protected def parseNameQuery(msg: Packet): NameQueryMessage = {
@@ -590,8 +596,13 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     guildRoster.clear
     guildRoster ++= parseGuildRoster(msg)
     updateGuildiesOnline
-    // Fire name queries for all members to pre-populate race cache (online and offline)
-    guildRoster.foreach { case (guid, _) => sendNameQuery(guid) }
+    // Fire name queries for online members always, offline only if online list or audit is enabled
+    guildRoster.foreach { case (guid, member) =>
+      if (member.isOnline) sendNameQuery(guid)
+      else if (wowchat.discord.GuildOnlineListPublisher.isEnabled || wowchat.discord.GuildDiscordAuditPublisher.isEnabled) {
+        sendNameQuery(guid)
+      }
+    }
   }
 
   protected def parseGuildRoster(msg: Packet): Map[Long, GuildMember] = {
@@ -644,7 +655,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
         queuedChatMessages.get(chatMessage.guid).fold({
           queuedChatMessages += chatMessage.guid -> ListBuffer(chatMessage)
           sendNameQuery(chatMessage.guid)
-        })(_ += chatMessage)
+        })(buf => if (buf.size < 10) buf += chatMessage)
       })(name => {
         Global.discord.sendMessageFromWow(Some(name.name), chatMessage.message, chatMessage.tp, chatMessage.channel)
       })

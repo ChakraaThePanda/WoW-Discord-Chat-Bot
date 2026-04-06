@@ -64,6 +64,8 @@ public final class GuildDiscordAuditPublisher {
 
     private GuildDiscordAuditPublisher() {}
 
+    public static boolean isEnabled() { return channelId > 0L; }
+
     public static synchronized void init() {
         if (started) return;
         started = true;
@@ -316,8 +318,9 @@ public final class GuildDiscordAuditPublisher {
         }
 
         // Post or edit each page
+        int totalMembers = sortedChars.size() - (int) sortedChars.stream().filter(n -> ignoreLower.contains(n.toLowerCase(Locale.ROOT))).count();
         for (int i = 0; i < pages.size(); i++) {
-            String title = pages.size() > 1 ? "Guild Roster (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster";
+            String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
                 .setDescription(pages.get(i))
