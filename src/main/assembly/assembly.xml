@@ -16,27 +16,10 @@
             <outputDirectory/>
             <directory>${project.build.directory}</directory>
             <includes>
-                <include>${project.artifactId}.jar</include>
+                <include>wowchat.jar</include>
+                <include>watchdog.jar</include>
             </includes>
             <fileMode>0644</fileMode>
-        </fileSet>
-        <fileSet>
-            <outputDirectory/>
-            <directory>src/main/resources</directory>
-            <includes>
-                <include>logback.xml</include>
-                <include>wowchat.conf</include>
-            </includes>
-            <fileMode>0644</fileMode>
-        </fileSet>
-        <fileSet>
-            <outputDirectory/>
-            <directory>src/main/resources</directory>
-            <includes>
-                <include>run.bat</include>
-                <include>run.sh</include>
-            </includes>
-            <fileMode>0755</fileMode>
         </fileSet>
     </fileSets>
 </assembly>

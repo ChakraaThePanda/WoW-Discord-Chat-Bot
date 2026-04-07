@@ -88,7 +88,7 @@ public final class GuildOnlineListPublisher {
     private static final String MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
 
     /** Health file path - Watchdog reads this to know WoW packets are still flowing. */
-    private static final String HEALTH_FILE = "watchdog.health";
+    private static final String WOW_HEALTH_FILE = "wow.health";
 
     /** How often we write the health file (seconds). */
     private static final int HEALTH_WRITE_INTERVAL_SEC = 30;
@@ -175,12 +175,13 @@ public final class GuildOnlineListPublisher {
                 }
             }, 15L, rotatePeriod, TimeUnit.SECONDS);
         }
+
     }
 
     // -------------------------------------------------------------------------
     // Health file writer - called every 30s by the scheduler
     //
-    // Writes the timestamp of the last WoW packet received to watchdog.health.
+    // Writes the timestamp of the last WoW packet received to wow.health.
     // The Watchdog reads this file to determine if the WoW connection is alive.
     // If lastPacketReceivedMs is 0 (bot never connected), nothing is written.
     // -------------------------------------------------------------------------
@@ -248,7 +249,7 @@ public final class GuildOnlineListPublisher {
             // The bot requests a fresh roster from the WoW server every 60s while connected.
             // If this timestamp stops updating, the WoW connection is dead.
             byte[] data = Long.toString(lastRoster).getBytes("UTF-8");
-            Files.write(Paths.get(HEALTH_FILE), data,
+            Files.write(Paths.get(WOW_HEALTH_FILE), data,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Throwable t) {
             System.err.println("[GuildOnlineList] Failed to write health file: " + t.getMessage());

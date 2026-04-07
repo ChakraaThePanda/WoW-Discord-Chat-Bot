@@ -1,16 +1,33 @@
 # WoW-Discord-Chat-Bot
-Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for the use on the Frostmourne of Stormforge.gg.
+Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for use on the server Frostmourne of Stormforge.gg.
 
 ---
-### Features I added
-* Guild Online List — auto-updating Discord message showing online members with level, race, class and zone
-* Race display — pre-fetched on startup via name queries, shows e.g. Level 73 Human Paladin
-* Guild Role Sync — automatically assigns Discord roles based on in-game rank via officer notes
-* DM Auto-Reply — bot replies to anyone who DMs it with a configurable message
-* Bot Status Rotation — cycles through custom status messages on a timer with {online-members} token
-* show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
-* Watchdog / Health file — external process monitors bot connectivity and restarts if needed
+
+### Features
+* Guild Online List — auto-updating Discord embed showing online members with level, race, class and zone, including Discord mention if linked
+* Guild Roster — auto-updating Discord embed showing all guild members grouped by Discord account with level, race and class per character
+* Guild Sync Audit — auto-updating Discord embed showing Discord members without a linked WoW character, grouped by role
+* Guild Role Sync — automatically assigns Discord roles based on in-game guild rank via officer notes
 * Whisper Invite — players whisper the bot a trigger word and automatically receive a guild invite in-game
-* Guild Sync Audit — auto-updating Discord message showing guild members without a linked Discord account and Discord members without a linked WoW character, grouped by role
-* Guild Roster Page - Shows each Discord members what characters they have in a list
-* Etc.
+* DM Auto-Reply — bot replies to anyone who DMs it with a configurable message
+* Bot Status Rotation — cycles through custom Discord status messages with {online-members} token
+* show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
+* Watchdog — separate process monitors bot health and restarts it automatically if the WoW connection dies or Discord relay breaks silently
+
+---
+
+### How to Use
+
+#### Running
+* Run `run.bat` (or `run.sh` on Linux) — this starts the watchdog which manages the bot automatically
+* For headless/background operation on Windows, use `run-headless.bat` instead
+* To run on Windows startup, place a shortcut to `run-headless.bat` in your Windows Startup folder (`shell:startup`)
+
+#### Linking Discord accounts (for Guild Role Sync, Roster and Audit)
+1. Enable Developer Mode in Discord: User Settings → Advanced → Developer Mode
+2. Right-click your username anywhere in Discord and click **Copy User ID**
+3. Log into WoW, open the Guild panel, find your character, and paste your User ID into your **Officer Note**
+4. The bot syncs automatically every few minutes
+
+#### Configuration
+All features are documented and optional in `wowchat.conf`. Features are disabled by default — set the relevant channel IDs or enable flags to activate them.
