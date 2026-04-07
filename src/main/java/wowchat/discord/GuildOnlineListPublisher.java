@@ -163,6 +163,20 @@ public final class GuildOnlineListPublisher {
             }
         }, 10L, HEALTH_WRITE_INTERVAL_SEC, TimeUnit.SECONDS);
 
+        // Discord health heartbeat - writes discord.health only when JDA confirms connected
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                JDA jda = getJda();
+                if (jda != null && jda.getStatus() == JDA.Status.CONNECTED) {
+                    byte[] data = Long.toString(System.currentTimeMillis()).getBytes("UTF-8");
+                    Files.write(Paths.get("discord.health"), data,
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                }
+            } catch (Throwable t) {
+                System.err.println("[GuildOnlineList] Error writing discord health file: " + t.getMessage());
+            }
+        }, 30L, 30L, TimeUnit.SECONDS);
+
         // Status rotation - only scheduled if messages are configured
         rotationActive = !statusMessages.isEmpty();
         if (!statusMessages.isEmpty()) {

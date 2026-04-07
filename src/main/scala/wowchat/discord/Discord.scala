@@ -21,23 +21,11 @@ import wowchat.game.GamePackets
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import java.nio.file.{Files, Paths, StandardOpenOption}
 
 object Discord {
 
   def sendMessage(channel: MessageChannel, message: String): Unit = {
     splitUpByLength(message, 2000).foreach(channel.sendMessage(_).queue)
-    updateDiscordHealth()
-  }
-
-  private def updateDiscordHealth(): Unit = {
-    try {
-      val data = System.currentTimeMillis.toString.getBytes("UTF-8")
-      Files.write(Paths.get("discord.health"), data,
-        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-    } catch {
-      case _: Throwable =>
-    }
   }
 
   private def splitUpByLength(message: String, maxLength: Int): Seq[String] = {
