@@ -13,6 +13,7 @@ Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added fun
 * Bot Status Rotation — cycles through custom Discord status messages with {online-members} token
 * show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
 * Watchdog — separate process monitors bot health and restarts it automatically if the WoW connection dies or Discord relay breaks silently
+* Guild Death Ping — automatically mentions a configured Discord role when a guild member dies in-game
 
 ---
 
