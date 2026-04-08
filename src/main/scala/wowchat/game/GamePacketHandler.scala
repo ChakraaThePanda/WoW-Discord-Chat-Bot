@@ -49,6 +49,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   protected val playerRoster = LRUMap.empty[Long, Player]
   protected val guildRoster = mutable.Map.empty[Long, GuildMember]
   protected var lastRequestedGuildRoster: Long = _
+  def isInWorld: Boolean = inWorld
+  def getGuildRoster = guildRoster
   protected val executorService = Executors.newSingleThreadScheduledExecutor
 
   // cannot use multimap here because need deterministic order

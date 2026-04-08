@@ -163,8 +163,10 @@ public final class GuildOnlineListPublisher {
             }
         }, 10L, HEALTH_WRITE_INTERVAL_SEC, TimeUnit.SECONDS);
 
-        // Discord health heartbeat - writes discord.health only when JDA confirms connected
-        scheduler.scheduleAtFixedRate(() -> {
+        // Discord health heartbeat - separate thread to avoid interfering with rotation
+        ScheduledExecutorService discordHealthScheduler = Executors.newSingleThreadScheduledExecutor(
+            new DaemonThreadFactory("wowchat-discord-health"));
+        discordHealthScheduler.scheduleAtFixedRate(() -> {
             try {
                 JDA jda = getJda();
                 if (jda != null && jda.getStatus() == JDA.Status.CONNECTED) {
@@ -256,13 +258,10 @@ public final class GuildOnlineListPublisher {
             GameCommandHandler handler = gameOpt.get();
             if (!(handler instanceof GamePacketHandler)) return;
 
-            long lastRoster = ((GamePacketHandler) handler).lastRequestedGuildRoster();
-            if (lastRoster == 0L) return; // Bot hasn't connected to WoW yet
+            // Only write if bot is fully connected and in the world
+            if (!((GamePacketHandler) handler).isInWorld()) return;
 
-            // Write the timestamp of the last guild roster request.
-            // The bot requests a fresh roster from the WoW server every 60s while connected.
-            // If this timestamp stops updating, the WoW connection is dead.
-            byte[] data = Long.toString(lastRoster).getBytes("UTF-8");
+            byte[] data = Long.toString(System.currentTimeMillis()).getBytes("UTF-8");
             Files.write(Paths.get(WOW_HEALTH_FILE), data,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Throwable t) {

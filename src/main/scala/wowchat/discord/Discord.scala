@@ -97,6 +97,19 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
   private var lastStatus: Option[Activity] = None
   private var firstConnect = true
 
+  // Guild death role ping - loaded once from conf
+  private val guildDeathRoleId: Option[String] = {
+    try {
+      val conf = com.typesafe.config.ConfigFactory.parseFile(
+        new java.io.File(System.getProperty("wowchat.configFile", "wowchat.conf")))
+        .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true))
+      if (conf.hasPath("guildDeathRoleId")) {
+        val v = conf.getString("guildDeathRoleId").trim
+        if (v.nonEmpty && v != "0" && v.forall(_.isDigit)) Some(v) else None
+      } else None
+    } catch { case _: Throwable => None }
+  }
+
   def changeStatus(gameType: ActivityType, message: String): Unit = {
     lastStatus = Some(Activity.of(gameType, message))
     jda.getPresence.setActivity(lastStatus.get)
@@ -135,10 +148,25 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
             .replace("%message", parsedResolvedTags)
             .replace("%target", wowChannel.getOrElse(""))
 
-          val filter = shouldFilter(channelConfig.filters, formatted)
-          logger.info(s"${if (filter) "FILTERED " else ""}WoW->Discord(${channel.getName}) $formatted")
+          // Append guild death role mention if configured and message is a guild member death
+          val finalMessage = guildDeathRoleId match {
+            case Some(roleId) if formatted.contains("has been slain by") =>
+              // Extract first word after "[SYSTEM]: " prefix
+              val stripped = formatted.replaceFirst("^.*\\]:\\s*", "")
+              val name = stripped.split(" ").headOption.getOrElse("").trim
+              val isGuildMember = name.nonEmpty && Global.game.exists {
+                case handler: wowchat.game.GamePacketHandler =>
+                  handler.getGuildRoster.valuesIterator.exists(_.name.equalsIgnoreCase(name))
+                case _ => false
+              }
+              if (isGuildMember) formatted + s" <@&$roleId>" else formatted
+            case _ => formatted
+          }
+
+          val filter = shouldFilter(channelConfig.filters, finalMessage)
+          logger.info(s"${if (filter) "FILTERED " else ""}WoW->Discord(${channel.getName}) $finalMessage")
           if (!filter) {
-            Discord.sendMessage(channel, formatted)
+            Discord.sendMessage(channel, finalMessage)
           }
           if (Global.config.discord.enableTagFailedNotifications) {
             errors.foreach(error => {
