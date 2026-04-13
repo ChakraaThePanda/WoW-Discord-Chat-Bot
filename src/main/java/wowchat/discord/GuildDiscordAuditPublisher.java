@@ -320,9 +320,24 @@ public final class GuildDiscordAuditPublisher {
         // Post or edit each page
         int totalMembers = sortedChars.size() - (int) sortedChars.stream().filter(n -> ignoreLower.contains(n.toLowerCase(Locale.ROOT))).count();
         int uniquePlayers = byDiscordId.size();
+        int level80Count = 0;
+        if (finalRoster != null) {
+            for (String charName : sortedChars) {
+                if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
+                scala.collection.Iterator<GuildMember> it = finalRoster.valuesIterator();
+                while (it.hasNext()) {
+                    GuildMember member = it.next();
+                    if (member.name().equalsIgnoreCase(charName)) {
+                        if ((member.level() & 0xFF) >= 80) level80Count++;
+                        break;
+                    }
+                }
+            }
+        }
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
-            String description_prefix = i == 0 ? uniquePlayers + " Linked Players\n\n" : "";
+            String level80Line = finalRoster != null ? level80Count + " Level 80s\n" : "";
+            String description_prefix = i == 0 ? uniquePlayers + " Linked Players\n" + level80Line + "\n" : "";
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
                 .setDescription(description_prefix + pages.get(i))
