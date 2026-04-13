@@ -274,7 +274,8 @@ public final class GuildDiscordAuditPublisher {
             StringBuilder block = new StringBuilder();
             Member m = discordGuild.getMemberById(entry.getKey());
             String displayName = m != null ? m.getEffectiveName() : entry.getKey();
-            block.append("<@").append(entry.getKey()).append("> - **").append(displayName).append("**\n");
+            int charCount = entry.getValue().size();
+            block.append("<@").append(entry.getKey()).append("> - **").append(displayName).append("** (").append(charCount).append(")\n");
             for (String charName : entry.getValue()) {
                 block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
             }
