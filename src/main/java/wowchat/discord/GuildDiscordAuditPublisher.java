@@ -322,7 +322,7 @@ public final class GuildDiscordAuditPublisher {
         int uniquePlayers = byDiscordId.size();
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
-            String description_prefix = i == 0 ? uniquePlayers + " Unique Players\n\n" : "";
+            String description_prefix = i == 0 ? uniquePlayers + " Linked Players\n\n" : "";
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
                 .setDescription(description_prefix + pages.get(i))
