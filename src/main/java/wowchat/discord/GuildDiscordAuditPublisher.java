@@ -319,11 +319,13 @@ public final class GuildDiscordAuditPublisher {
 
         // Post or edit each page
         int totalMembers = sortedChars.size() - (int) sortedChars.stream().filter(n -> ignoreLower.contains(n.toLowerCase(Locale.ROOT))).count();
+        int uniquePlayers = byDiscordId.size();
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
+            String description_prefix = i == 0 ? uniquePlayers + " Unique Players\n\n" : "";
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
-                .setDescription(pages.get(i))
+                .setDescription(description_prefix + pages.get(i))
                 .setColor(Color.decode("#2b2d31"))
                 .setFooter(i == pages.size() - 1 ? "Last updated: " + new java.util.Date() : null)
                 .build();
