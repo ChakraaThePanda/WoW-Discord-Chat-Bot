@@ -13,38 +13,40 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * WhisperInviteHandler
+ * AutoGuildInviteHandler
  *
- * Listens for in-game whispers containing one of the configured trigger words.
- * When matched, sends a CMSG_GUILD_INVITE packet to invite the whisperer.
+ * Listens for trigger words in whispers and/or custom in-game channels.
+ * When matched, sends a CMSG_GUILD_INVITE to the sender.
  *
  * Config (wowchat.conf):
- *   whisperInvite {
- *     enabled    = true
- *     triggers   = ["invite", "join"]
- *     exactMatch = false
- *     channels   = ["aethernal"]   // optional: also listen in these in-game channels
+ *   autoGuildInvite {
+ *     triggers       = ["invite", "join"]
+ *     exactMatch     = false
+ *     whisperEnabled = true
+ *     channels       = ["recruitment"]
  *   }
+ *
+ * If the block is absent or triggers is empty, the feature is disabled.
+ * whisperEnabled and channels are independent — either or both can be active.
  */
-public final class WhisperInviteHandler {
+public final class AutoGuildInviteHandler {
 
-    private static volatile boolean      loaded   = false;
-    private static volatile boolean      enabled  = false;
-    private static volatile List<String> triggers = Collections.emptyList();
-    private static volatile boolean      exact    = false;
-    private static volatile List<String> channels = Collections.emptyList();
+    private static volatile boolean      loaded         = false;
+    private static volatile boolean      active         = false;
+    private static volatile List<String> triggers       = Collections.emptyList();
+    private static volatile boolean      exact          = false;
+    private static volatile boolean      whisperEnabled = false;
+    private static volatile List<String> channels       = Collections.emptyList();
 
-    // Guids waiting for a name query response before we can send the invite
     private static final java.util.concurrent.ConcurrentHashMap<Long, Boolean> pendingInvites =
         new java.util.concurrent.ConcurrentHashMap<>();
 
-    private WhisperInviteHandler() {}
+    private AutoGuildInviteHandler() {}
 
     public static List<String> getChannels() { return channels; }
 
-    // Called from handle_SMSG_NAME_QUERY after a name is resolved
     public static void onNameResolved(long guid, String name, GamePacketHandler handler) {
-        if (!enabled) return;
+        if (!active) return;
         if (!pendingInvites.remove(guid, Boolean.TRUE)) return;
         handler.sendGuildInvite(name);
     }
@@ -57,11 +59,8 @@ public final class WhisperInviteHandler {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            if (!config.hasPath("whisperInvite")) return;
-            Config c = config.getConfig("whisperInvite");
-
-            enabled = c.hasPath("enabled") && c.getBoolean("enabled");
-            if (!enabled) return;
+            if (!config.hasPath("autoGuildInvite")) return;
+            Config c = config.getConfig("autoGuildInvite");
 
             List<String> rawTriggers = c.hasPath("triggers")
                 ? c.getStringList("triggers")
@@ -73,7 +72,13 @@ public final class WhisperInviteHandler {
             }
             triggers = Collections.unmodifiableList(parsed);
 
-            exact = c.hasPath("exactMatch") && c.getBoolean("exactMatch");
+            if (triggers.isEmpty()) {
+                System.err.println("[AutoGuildInvite] triggers list is empty — feature disabled.");
+                return;
+            }
+
+            exact          = c.hasPath("exactMatch") && c.getBoolean("exactMatch");
+            whisperEnabled = !c.hasPath("whisperEnabled") || c.getBoolean("whisperEnabled");
 
             List<String> rawChannels = c.hasPath("channels")
                 ? c.getStringList("channels")
@@ -85,63 +90,45 @@ public final class WhisperInviteHandler {
             }
             channels = Collections.unmodifiableList(parsedChannels);
 
-            if (triggers.isEmpty()) {
-                enabled = false;
-                System.err.println("[WhisperInvite] triggers list is empty — feature disabled.");
+            active = whisperEnabled || !channels.isEmpty();
+            if (!active) {
+                System.err.println("[AutoGuildInvite] Neither whisperEnabled nor channels configured — feature disabled.");
                 return;
             }
 
-            System.out.println("[WhisperInvite] Enabled. Triggers: " + triggers
+            System.out.println("[AutoGuildInvite] Enabled. Triggers: " + triggers
                 + " (" + (exact ? "exact match" : "contains") + ")"
+                + " | Whisper: " + whisperEnabled
                 + (channels.isEmpty() ? "" : " | Channels: " + channels));
 
         } catch (Throwable t) {
-            System.err.println("[WhisperInvite] Config error: " + t.getMessage());
-            enabled = false;
+            System.err.println("[AutoGuildInvite] Config error: " + t.getMessage());
         }
     }
 
-    /**
-     * Called for raw SMSG_MESSAGECHAT packets of type CHAT_MSG_CHANNEL.
-     * Reads the packet directly so no Discord routing is required.
-     * Resets the buffer after reading so normal processing continues.
-     *
-     * WotLK CHAT_MSG_CHANNEL packet structure:
-     *   type(1) + lang(4) + channelName(string) + unknown(4) + senderGuid(8) +
-     *   unknown(4) + senderGuid(8) + txtLen(4) + txt(txtLen-1) + null(1) + tag(1)
-     */
+    // WotLK CHAT_MSG_CHANNEL structure:
+    // type(1) + lang(4) + senderGuid(8) + skip(4) + channelName(string) + skip(8) + txtLen(4) + txt
     public static void handleIfChannel(Packet msg, GamePacketHandler handler) {
-        if (!enabled) return;
-        if (channels.isEmpty()) return;
+        if (!active || channels.isEmpty()) return;
 
-        System.out.println("[WhisperInvite] handleIfChannel called, enabled=" + enabled + " channels=" + channels);
         msg.byteBuf().markReaderIndex();
-        // Print first 20 bytes as hex for debugging
-        StringBuilder hexDump = new StringBuilder();
-        for (int i = 0; i < Math.min(20, msg.byteBuf().readableBytes()); i++) {
-            hexDump.append(String.format("%02X ", msg.byteBuf().getByte(msg.byteBuf().readerIndex() + i)));
-        }
-        System.out.println("[WhisperInvite] handleIfChannel called. enabled=" + enabled + " channels=" + channels + " hex=" + hexDump.toString().trim());
         try {
             msg.byteBuf().readByte();              // type
             int lang = msg.byteBuf().readIntLE();
             if (lang == -1) return;                // addon message
 
-            // WotLK CHAT_MSG_CHANNEL structure (matches GamePacketHandlerWotLK.parseChatMessage):
-            // type(1) + lang(4) + senderGuid(8) + skip(4) + channelName(string) + skip(8) + txtLen(4) + txt
             long senderGuid = msg.byteBuf().readLongLE();
             msg.byteBuf().skipBytes(4);
 
             String rawChannel = msg.readString();
             String normalizedChannel = rawChannel.toLowerCase().replaceFirst("^\\d+\\.\\s*", "");
-            System.out.println("[WhisperInvite] rawChannel='" + rawChannel + "' normalized='" + normalizedChannel + "' configured=" + channels);
             if (!channels.contains(normalizedChannel)) return;
 
             msg.byteBuf().skipBytes(8);            // sender guid again
 
             int txtLen = msg.byteBuf().readIntLE();
             if (txtLen <= 0) return;
-            String text = msg.byteBuf().readCharSequence(txtLen - 1, java.nio.charset.Charset.forName("UTF-8"))
+            String text = msg.byteBuf().readCharSequence(txtLen - 1, Charset.forName("UTF-8"))
                 .toString().trim().toLowerCase();
             if (text.startsWith("{?")) text = text.substring(2);
 
@@ -154,7 +141,6 @@ public final class WhisperInviteHandler {
             }
             if (!matched) return;
 
-            // Resolve sender name from roster
             scala.Option<wowchat.game.Player> playerOpt = handler.playerRoster().get(
                 scala.runtime.BoxesRunTime.boxToLong(senderGuid));
             if (playerOpt == null || playerOpt.isEmpty()) {
@@ -165,19 +151,19 @@ public final class WhisperInviteHandler {
             handler.sendGuildInvite(playerOpt.get().name());
 
         } catch (Throwable t) {
-            System.err.println("[WhisperInvite] Error handling channel message: " + t.getMessage());
+            System.err.println("[AutoGuildInvite] Error handling channel message: " + t.getMessage());
         } finally {
             msg.byteBuf().resetReaderIndex();
         }
     }
 
-    // WotLK SMSG_MESSAGECHAT structure:
-    //   type(1) + lang(4) + guid(8) + unknown(4) + guid_again(8) + txtLen(4) + txt(txtLen-1) + null(1) + tag(1)
+    // WotLK CHAT_MSG_WHISPER structure:
+    // type(1) + lang(4) + guid(8) + unknown(4) + guid_again(8) + txtLen(4) + txt(txtLen-1) + null(1) + tag(1)
     public static void handleIfWhisper(Packet msg, GamePacketHandler handler) {
+        if (!active || !whisperEnabled) return;
+
         msg.byteBuf().markReaderIndex();
         try {
-            if (!enabled) return;
-
             msg.byteBuf().readByte();              // type
             int lang = msg.byteBuf().readIntLE();
             if (lang == -1) return;                // addon message
@@ -190,11 +176,9 @@ public final class WhisperInviteHandler {
             if (txtLen <= 0) return;
             String text = msg.byteBuf().readCharSequence(txtLen - 1, Charset.forName("UTF-8"))
                 .toString().trim();
-            // Strip server-injected prefix
             if (text.startsWith("{?")) text = text.substring(2);
             text = text.toLowerCase();
 
-            // Check against triggers
             boolean matched = false;
             for (String trigger : triggers) {
                 if (exact ? text.equals(trigger) : text.contains(trigger)) {
@@ -204,11 +188,9 @@ public final class WhisperInviteHandler {
             }
             if (!matched) return;
 
-            // Get sender name from player roster via guid
             scala.Option<wowchat.game.Player> playerOpt = handler.playerRoster().get(
                 scala.runtime.BoxesRunTime.boxToLong(senderGuid));
             if (playerOpt == null || playerOpt.isEmpty()) {
-                // Name not known yet — queue invite until name query resolves
                 pendingInvites.put(senderGuid, Boolean.TRUE);
                 handler.sendNameQuery(senderGuid);
                 return;
@@ -216,7 +198,7 @@ public final class WhisperInviteHandler {
             handler.sendGuildInvite(playerOpt.get().name());
 
         } catch (Throwable t) {
-            System.err.println("[WhisperInvite] Error handling whisper: " + t.getMessage());
+            System.err.println("[AutoGuildInvite] Error handling whisper: " + t.getMessage());
         } finally {
             msg.byteBuf().resetReaderIndex();
         }

@@ -384,7 +384,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       }
 
       // Process any pending whisper invites for this guid
-      wowchat.discord.WhisperInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
+      wowchat.discord.AutoGuildInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
 
       queuedChatMessages
         .remove(nameQueryMessage.guid)
@@ -493,7 +493,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       updateGuildRoster
     }
 
-    // join channels
+    // join channels from chat routing config
     Global.config.channels
       .flatMap(channelConfig => {
         channelConfig.wow.channel.fold[Option[(Int, String)]](None)(channelName => {
@@ -507,6 +507,16 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
         writeJoinChannel(byteBuf, id, name.getBytes("UTF-8"))
         ctx.get.writeAndFlush(Packet(CMSG_JOIN_CHANNEL, byteBuf))
       }
+
+    // join whisperInvite channels (not in chat routing, joined for invite listening only)
+    scala.collection.JavaConverters.asScalaBufferConverter(wowchat.discord.AutoGuildInviteHandler.getChannels).asScala.foreach(name => {
+      if (!Global.config.channels.exists(_.wow.channel.exists(_.equalsIgnoreCase(name)))) {
+        logger.info(s"Joining channel $name (whisper invite)")
+        val byteBuf = PooledByteBufAllocator.DEFAULT.buffer(50, 200)
+        writeJoinChannel(byteBuf, ChatChannelIds.getId(name), name.getBytes("UTF-8"))
+        ctx.get.writeAndFlush(Packet(CMSG_JOIN_CHANNEL, byteBuf))
+      }
+    })
   }
 
   protected def writeJoinChannel(out: ByteBuf, id: Int, utf8ChannelBytes: Array[Byte]): Unit = {
@@ -642,8 +652,13 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     msg.byteBuf.resetReaderIndex()
 
     if (tp == ChatEvents.CHAT_MSG_WHISPER) {
-      wowchat.discord.WhisperInviteHandler.handleIfWhisper(msg, this)
+      wowchat.discord.AutoGuildInviteHandler.handleIfWhisper(msg, this)
       // buffer is reset by handleIfWhisper, continue with normal processing
+    }
+
+    if (tp == ChatEvents.CHAT_MSG_CHANNEL) {
+      wowchat.discord.AutoGuildInviteHandler.handleIfChannel(msg, this)
+      // buffer is reset by handleIfChannel, continue with normal processing
     }
 
     parseChatMessage(msg).foreach(sendChatMessage)

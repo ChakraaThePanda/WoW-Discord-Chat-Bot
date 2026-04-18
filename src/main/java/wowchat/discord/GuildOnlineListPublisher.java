@@ -578,7 +578,7 @@ public final class GuildOnlineListPublisher {
         DiscordDMHandler.register(configFile);
 
         // Initialize whisper invite handler
-        WhisperInviteHandler.init();
+        AutoGuildInviteHandler.init();
     }
 
     // -------------------------------------------------------------------------
