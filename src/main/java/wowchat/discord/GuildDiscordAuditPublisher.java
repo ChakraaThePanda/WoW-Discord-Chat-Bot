@@ -293,12 +293,16 @@ public final class GuildDiscordAuditPublisher {
         }
 
         // Pack blocks into pages - never split a user block across pages
+        // Reserve space on page 1 for the linked players + level 80s prefix
+        int uniquePlayersCount = byDiscordId.size();
         List<String> pages = new ArrayList<>();
         StringBuilder currentPage = new StringBuilder();
         final int PAGE_LIMIT = 3800;
+        final int FIRST_PAGE_LIMIT = PAGE_LIMIT - 50; // reserve ~50 chars for prefix on page 1
 
         for (String block : blocks) {
-            if (currentPage.length() + block.length() > PAGE_LIMIT && currentPage.length() > 0) {
+            int limit = pages.isEmpty() ? FIRST_PAGE_LIMIT : PAGE_LIMIT;
+            if (currentPage.length() + block.length() > limit && currentPage.length() > 0) {
                 pages.add(currentPage.toString());
                 currentPage = new StringBuilder();
             }
@@ -320,7 +324,6 @@ public final class GuildDiscordAuditPublisher {
 
         // Post or edit each page
         int totalMembers = sortedChars.size() - (int) sortedChars.stream().filter(n -> ignoreLower.contains(n.toLowerCase(Locale.ROOT))).count();
-        int uniquePlayers = byDiscordId.size();
         int level80Count = 0;
         if (finalRoster != null) {
             for (String charName : sortedChars) {
@@ -338,7 +341,7 @@ public final class GuildDiscordAuditPublisher {
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
             String level80Line = finalRoster != null ? level80Count + " Level 80s\n" : "";
-            String description_prefix = i == 0 ? uniquePlayers + " Linked Players\n" + level80Line + "\n" : "";
+            String description_prefix = i == 0 ? uniquePlayersCount + " Linked Players\n" + level80Line + "\n" : "";
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
                 .setDescription(description_prefix + pages.get(i))
