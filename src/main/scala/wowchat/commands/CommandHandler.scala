@@ -2,6 +2,7 @@ package wowchat.commands
 
 import com.typesafe.scalalogging.StrictLogging
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel
+import net.dv8tion.jda.api.interactions.InteractionHook
 import wowchat.common.Global
 import wowchat.discord.Discord
 import wowchat.game.{GamePackets, GameResources, GuildInfo, GuildMember}
@@ -9,7 +10,7 @@ import wowchat.game.{GamePackets, GameResources, GuildInfo, GuildMember}
 import scala.collection.mutable
 import scala.util.Try
 
-case class WhoRequest(messageChannel: MessageChannel, playerName: String)
+case class WhoRequest(messageChannel: MessageChannel, playerName: String, hook: Option[InteractionHook] = None)
 case class WhoResponse(playerName: String, guildName: String, lvl: Int, cls: String, race: String, gender: Option[String], zone: String)
 
 object CommandHandler extends StrictLogging {

@@ -216,7 +216,12 @@ public final class GuildDiscordAuditPublisher {
                 String attrs = "Level " + level
                     + (race.isEmpty() ? "" : " " + race.trim())
                     + " " + cls;
-                return charName + " (" + attrs + ")";
+                StringBuilder entry = new StringBuilder(charName + " (" + attrs + ")");
+                java.util.List<String> profs = ProfessionManager.getProfessions(charName);
+                for (String prof : profs) {
+                    entry.append("\n  \u2022 ").append(ProfessionManager.formatProfession(prof));
+                }
+                return entry.toString();
             }
         }
         return charName;
@@ -285,7 +290,7 @@ public final class GuildDiscordAuditPublisher {
         // Unlinked section as one block
         if (!unlinked.isEmpty()) {
             StringBuilder block = new StringBuilder();
-            block.append("**Unlinked Characters**\n");
+            block.append("**Unlinked Characters (" + unlinked.size() + ")**\n");
             for (String charName : unlinked) {
                 block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
             }

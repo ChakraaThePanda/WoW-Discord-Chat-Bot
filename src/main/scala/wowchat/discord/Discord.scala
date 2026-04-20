@@ -1,6 +1,6 @@
 package wowchat.discord
 
-import wowchat.commands.CommandHandler
+import wowchat.commands.{CommandHandler, WhoRequest}
 import wowchat.common._
 import com.typesafe.scalalogging.StrictLogging
 import com.vdurmont.emoji.EmojiParser
@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.entities.Activity.ActivityType
 import net.dv8tion.jda.api.entities.channel.ChannelType
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel
 import net.dv8tion.jda.api.events.StatusChangeEvent
+import net.dv8tion.jda.api.events.interaction.command.{CommandAutoCompleteInteractionEvent, SlashCommandInteractionEvent}
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.events.session.ShutdownEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
@@ -292,6 +293,8 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
           if (firstConnect) {
             discordConnectionCallback.connected
             firstConnect = false
+            // Register slash commands on first connect only
+            wowchat.discord.SlashCommandHandler.registerCommands(jda)
           } else {
             discordConnectionCallback.reconnected
           }
@@ -310,6 +313,50 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
         logger.error("Per new Discord rules, you must check the PRESENCE INTENT, SERVER MEMBERS INTENT, and MESSAGE CONTENT INTENT boxes under \"Privileged Gateway Intents\" for this bot in the developer portal. You can find more info at https://discord.com/developers/docs/topics/gateway#privileged-intents")
       case _ =>
     }
+  }
+
+  override def onSlashCommandInteraction(event: SlashCommandInteractionEvent): Unit = {
+    val notOnline = "Bot is not online."
+    event.getName match {
+      case "who" =>
+        val player = event.getOption("player").getAsString
+        event.deferReply().setEphemeral(true).queue()
+        Global.game.fold({
+          event.getHook.sendMessage(notOnline).setEphemeral(true).queue()
+        })(game => {
+          CommandHandler.whoRequest = WhoRequest(
+            event.getChannel.asInstanceOf[net.dv8tion.jda.api.entities.channel.middleman.MessageChannel],
+            player,
+            Some(event.getHook)
+          )
+          game.handleWho(Some(player))
+        })
+
+      case "online" =>
+        event.deferReply().setEphemeral(true).queue()
+        Global.game.fold({
+          event.getHook.sendMessage(notOnline).queue()
+        })(game => {
+          val result = game.handleWho(None)
+          event.getHook.sendMessage(result.getOrElse("No guild members online.")).queue()
+        })
+
+      case "gmotd" =>
+        event.deferReply().setEphemeral(true).queue()
+        Global.game.fold({
+          event.getHook.sendMessage(notOnline).queue()
+        })(game => {
+          val result = game.handleGmotd()
+          event.getHook.sendMessage(result.getOrElse("No guild message of the day.")).queue()
+        })
+
+      case "profession" =>
+        wowchat.discord.SlashCommandHandler.handleProfCommand(event)
+    }
+  }
+
+  override def onCommandAutoCompleteInteraction(event: CommandAutoCompleteInteractionEvent): Unit = {
+    wowchat.discord.SlashCommandHandler.handleAutoComplete(event)
   }
 
   override def onMessageReceived(event: MessageReceivedEvent): Unit = {

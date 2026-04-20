@@ -226,6 +226,12 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     sendMessageToWow(ChatEvents.CHAT_MSG_GUILD, message, None)
   }
 
+  def sendInspect(guid: Long): Unit = {
+    val out = PooledByteBufAllocator.DEFAULT.buffer(8, 8)
+    out.writeLongLE(guid)
+    ctx.get.writeAndFlush(Packet(CMSG_INSPECT, out))
+  }
+
   def sendNameQuery(guid: Long): Unit = {
     ctx.foreach(ctx => {
       val out = PooledByteBufAllocator.DEFAULT.buffer(8, 8)
@@ -292,6 +298,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       case SMSG_LOGIN_VERIFY_WORLD => handle_SMSG_LOGIN_VERIFY_WORLD(msg)
       case SMSG_GUILD_QUERY => handle_SMSG_GUILD_QUERY(msg)
       case SMSG_GUILD_EVENT => handle_SMSG_GUILD_EVENT(msg)
+      case SMSG_INSPECT_TALENT => wowchat.discord.ProfessionCache.handleInspectTalent(msg)
       case SMSG_GUILD_ROSTER => handle_SMSG_GUILD_ROSTER(msg)
       case SMSG_MESSAGECHAT => handle_SMSG_MESSAGECHAT(msg)
       case SMSG_GUILD_INVITE => handle_SMSG_GUILD_INVITE(msg)
@@ -608,10 +615,15 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     guildRoster.clear
     guildRoster ++= parseGuildRoster(msg)
     updateGuildiesOnline
+    // Clean up professions.json entries for characters no longer in guild
+    val memberNames = new java.util.HashSet[String]()
+    guildRoster.values.foreach(m => memberNames.add(m.name.toLowerCase))
+    wowchat.discord.ProfessionManager.cleanupStaleEntries(memberNames)
+
     // Fire name queries for online members always, offline only if online list or audit is enabled
     guildRoster.foreach { case (guid, member) =>
       if (member.isOnline) sendNameQuery(guid)
-      else if (wowchat.discord.GuildOnlineListPublisher.isEnabled || wowchat.discord.GuildDiscordAuditPublisher.isEnabled) {
+      else if (wowchat.discord.GuildOnlineListPublisher.isEnabled || wowchat.discord.GuildRosterPublisher.isEnabled) {
         sendNameQuery(guid)
       }
     }
@@ -761,14 +773,22 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   // because the packet doesn't include a cookie/id/requested name if none found
   private def handle_SMSG_WHO(msg: Packet): Unit = {
     val displayResults = parseWhoResponse(msg)
+    val req = CommandHandler.whoRequest
+
+    // Helper: send via interaction hook (ephemeral) if available, else normal channel message
+    def sendWhoMsg(msg: String): Unit = req.hook match {
+      case Some(hook) => hook.sendMessage(msg).setEphemeral(true).queue()
+      case None       => Discord.sendMessage(req.messageChannel, msg)
+    }
+
     // Try to find exact match
-    val exactName = CommandHandler.whoRequest.playerName.toLowerCase
+    val exactName = req.playerName.toLowerCase
     val exactMatch = displayResults.find(_.playerName.toLowerCase == exactName)
     val handledResponses = CommandHandler.handleWhoResponse(
       exactMatch,
       guildInfo,
       guildRoster,
-      guildMember => guildMember.name.equalsIgnoreCase(CommandHandler.whoRequest.playerName)
+      guildMember => guildMember.name.equalsIgnoreCase(req.playerName)
     )
     if (handledResponses.isEmpty) {
       // Exact match not found and no exact match in guild roster. Look for approximate matches.
@@ -781,24 +801,21 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
           guildMember => guildMember.name.toLowerCase.contains(exactName)
         )
         if (approximateMatches.isEmpty) {
-          // No approximate matches found.
-          Discord.sendMessage(CommandHandler.whoRequest.messageChannel, s"No player named ${CommandHandler.whoRequest.playerName} is currently playing.")
+          sendWhoMsg(s"No player named ${req.playerName} is currently playing.")
         } else {
-          // Send at most 3 approximate matches.
-          approximateMatches.take(3).foreach(Discord.sendMessage(CommandHandler.whoRequest.messageChannel, _))
+          approximateMatches.take(3).foreach(sendWhoMsg)
         }
       } else {
-        // Approximate matches found online!
         displayResults.take(3).foreach(whoResponse => {
           CommandHandler.handleWhoResponse(Some(whoResponse),
             guildInfo,
             guildRoster,
-            guildMember => guildMember.name.equalsIgnoreCase(CommandHandler.whoRequest.playerName)
-          ).foreach(Discord.sendMessage(CommandHandler.whoRequest.messageChannel, _))
+            guildMember => guildMember.name.equalsIgnoreCase(req.playerName)
+          ).foreach(sendWhoMsg)
         })
       }
     } else {
-      handledResponses.foreach(Discord.sendMessage(CommandHandler.whoRequest.messageChannel, _))
+      handledResponses.foreach(sendWhoMsg)
     }
   }
 

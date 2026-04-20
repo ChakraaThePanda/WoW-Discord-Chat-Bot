@@ -77,7 +77,7 @@ object WoWChat extends StrictLogging {
       override def connected: Unit = {
         wowchat.discord.GuildOnlineListPublisher.init()
         wowchat.discord.GuildRoleSync.init()
-        wowchat.discord.GuildDiscordAuditPublisher.init()
+        wowchat.discord.GuildRosterPublisher.init()
         gameConnectionController.connect
       }
 
