@@ -228,20 +228,18 @@ public final class GuildDiscordAuditPublisher {
                 
                 if (chars.size() < 2) continue;
                 
-                // Filter out rank 0 (Guild Master) since there can only be one
-                List<CharRankInfo> nonGMChars = new ArrayList<>();
+                // Treat rank 0 (Guild Master) as rank 1 (Officer) for comparison purposes
+                // This way GM shows as Officer in the mismatch list
+                List<CharRankInfo> adjustedChars = new ArrayList<>();
                 for (CharRankInfo c : chars) {
-                    if (c.rankIndex != 0) {
-                        nonGMChars.add(c);
-                    }
+                    int adjustedRank = (c.rankIndex == 0) ? 1 : c.rankIndex;
+                    String adjustedRankName = (c.rankIndex == 0) ? guildRanks.getOrDefault(1, "Officer") : c.rankName;
+                    adjustedChars.add(new CharRankInfo(c.charName, adjustedRank, adjustedRankName));
                 }
                 
-                // Need at least 2 non-GM characters to have a mismatch
-                if (nonGMChars.size() < 2) continue;
-                
-                // Find highest rank among non-GM characters (lowest rankIndex)
-                int highestRank = nonGMChars.stream().mapToInt(c -> c.rankIndex).min().orElse(Integer.MAX_VALUE);
-                String highestRankName = nonGMChars.stream()
+                // Find highest rank (lowest rankIndex)
+                int highestRank = adjustedChars.stream().mapToInt(c -> c.rankIndex).min().orElse(Integer.MAX_VALUE);
+                String highestRankName = adjustedChars.stream()
                     .filter(c -> c.rankIndex == highestRank)
                     .findFirst()
                     .map(c -> c.rankName)
@@ -249,7 +247,7 @@ public final class GuildDiscordAuditPublisher {
                 
                 // Find all characters with lower ranks
                 List<CharRankInfo> lowerRankedChars = new ArrayList<>();
-                for (CharRankInfo c : nonGMChars) {
+                for (CharRankInfo c : adjustedChars) {
                     if (c.rankIndex != highestRank) {
                         lowerRankedChars.add(c);
                     }
