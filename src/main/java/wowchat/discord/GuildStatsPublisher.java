@@ -90,10 +90,7 @@ public final class GuildStatsPublisher {
     }
 
     private static MessageEmbed buildStatsEmbed() {
-        scala.collection.mutable.Map<Object, GuildMember> roster = getGuildRoster();
-        
-        // Load ignore list
-        Set<String> ignoreLower = getIgnoreList();
+        Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(true);
         
         Map<String, Integer> factionCounts = new LinkedHashMap<>();
         Map<String, Integer> raceCounts = new LinkedHashMap<>();
@@ -104,14 +101,8 @@ public final class GuildStatsPublisher {
         
         int level80Count = 0;
 
-        scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
-        while (it.hasNext()) {
-            GuildMember m = it.next();
-            
-            // Skip ignored characters
-            if (ignoreLower.contains(m.name().toLowerCase(java.util.Locale.ROOT))) {
-                continue;
-            }
+        for (GuildMember m : members) {
+            // No ignore filter needed - already applied by cache
             
             // Faction
             String race = GuildOnlineListPublisher.getRace(m.name());
@@ -134,6 +125,8 @@ public final class GuildStatsPublisher {
 
         // Profession counts
         Map<String, Integer> profCounts = getProfessionCounts();
+        
+        int totalMembers = members.size();
 
         EmbedBuilder eb = new EmbedBuilder();
         eb.setTitle("Guild Statistics");
@@ -141,13 +134,13 @@ public final class GuildStatsPublisher {
         eb.setFooter("Last updated: " + new java.util.Date());
 
         eb.addField("Level 80s", String.valueOf(level80Count), true);
-        eb.addField("Faction Distribution", buildFactionGraph(factionCounts, roster.size()), false);
+        eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);
         
         // Only show race distribution if we have race data
-        String raceDistribution = raceCounts.isEmpty() ? "Race data not yet available" : buildRaceGraph(raceCounts, roster.size());
+        String raceDistribution = raceCounts.isEmpty() ? "Race data not yet available" : buildRaceGraph(raceCounts, totalMembers);
         eb.addField("Race Distribution", raceDistribution, false);
         
-        eb.addField("Class Distribution", buildClassGraph(classCounts, roster.size()), false);
+        eb.addField("Class Distribution", buildClassGraph(classCounts, totalMembers), false);
         eb.addField("Professions", buildProfessionList(profCounts), false);
 
         return eb.build();
@@ -317,30 +310,10 @@ public final class GuildStatsPublisher {
     private static Map<String, Integer> getProfessionCounts() {
         Map<String, Integer> counts = new HashMap<>();
         
-        // Read all profession data and count by profession name
         try {
-            wowchat.common.Global$ g = wowchat.common.Global$.MODULE$;
-            scala.Option<wowchat.game.GameCommandHandler> gameOpt = g.game();
-            if (gameOpt == null || gameOpt.isEmpty()) return counts;
+            Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(true);
             
-            wowchat.game.GameCommandHandler handler = gameOpt.get();
-            if (!(handler instanceof wowchat.game.GamePacketHandler)) return counts;
-            
-            wowchat.game.GamePacketHandler gph = (wowchat.game.GamePacketHandler) handler;
-            scala.collection.mutable.Map<Object, GuildMember> roster = gph.getGuildRoster();
-            
-            // Load ignore list
-            Set<String> ignoreLower = getIgnoreList();
-            
-            scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
-            while (it.hasNext()) {
-                GuildMember m = it.next();
-                
-                // Skip ignored characters
-                if (ignoreLower.contains(m.name().toLowerCase(java.util.Locale.ROOT))) {
-                    continue;
-                }
-                
+            for (GuildMember m : members) {
                 List<String> profs = ProfessionManager.getProfessions(m.name());
                 for (String stored : profs) {
                     String prof = ProfessionManager.profName(stored);
@@ -352,34 +325,5 @@ public final class GuildStatsPublisher {
         }
         
         return counts;
-    }
-
-    private static scala.collection.mutable.Map<Object, GuildMember> getGuildRoster() {
-        try {
-            wowchat.common.Global$ g = wowchat.common.Global$.MODULE$;
-            scala.Option<wowchat.game.GameCommandHandler> gameOpt = g.game();
-            if (gameOpt != null && !gameOpt.isEmpty() && gameOpt.get() instanceof wowchat.game.GamePacketHandler) {
-                return ((wowchat.game.GamePacketHandler) gameOpt.get()).getGuildRoster();
-            }
-        } catch (Throwable t) {}
-        return new scala.collection.mutable.HashMap<>();
-    }
-
-    private static Set<String> getIgnoreList() {
-        Set<String> ignoreSet = new HashSet<>();
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            com.typesafe.config.Config config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
-                .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            if (config.hasPath("guildOnlineListIgnore")) {
-                for (String name : config.getStringList("guildOnlineListIgnore")) {
-                    if (name != null && !name.trim().isEmpty()) {
-                        ignoreSet.add(name.trim().toLowerCase(java.util.Locale.ROOT));
-                    }
-                }
-            }
-        } catch (Throwable t) {}
-        return ignoreSet.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(ignoreSet);
     }
 }

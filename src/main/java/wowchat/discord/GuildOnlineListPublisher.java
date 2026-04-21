@@ -542,6 +542,9 @@ public final class GuildOnlineListPublisher {
                 ? Collections.emptySet()
                 : Collections.unmodifiableSet(ignoreSet);
 
+            // Update shared cache with ignore list (OPTIMIZATION)
+            GuildDataCache.getInstance().setIgnoreList(ignoreLower);
+
             // Status rotation messages
             List<String> msgList = new ArrayList<>();
             try {

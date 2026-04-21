@@ -95,6 +95,9 @@ public final class GuildRosterPublisher {
     }
 
     private static void tick() {
+        // Refresh shared cache once per tick (OPTIMIZATION)
+        GuildDataCache.getInstance().refresh();
+        
         JDA jda = GuildOnlineListPublisher.getJda();
         if (jda == null) return;
 
@@ -104,7 +107,7 @@ public final class GuildRosterPublisher {
             return;
         }
 
-        Map<String, String> rosterNotes = getGuildRosterNotes();
+        Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes();
         if (rosterNotes == null) return;
 
         List<Guild> guilds = jda.getGuilds();
@@ -214,25 +217,23 @@ public final class GuildRosterPublisher {
     }
 
     private static String formatCharEntry(String charName, scala.collection.Map<Object, GuildMember> roster) {
-        scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
-        while (it.hasNext()) {
-            GuildMember m = it.next();
-            if (m.name().equalsIgnoreCase(charName)) {
-                String race = GuildOnlineListPublisher.getRace(charName);
-                String cls = getClassName(m.charClass());
-                int level = m.level() & 0xFF; // byte to unsigned int
-                String attrs = "Level " + level
-                    + (race.isEmpty() ? "" : " " + race.trim())
-                    + " " + cls;
-                StringBuilder entry = new StringBuilder(charName + " (" + attrs + ")");
-                java.util.List<String> profs = ProfessionManager.getProfessions(charName);
-                for (String prof : profs) {
-                    entry.append("\n  \u2022 ").append(ProfessionManager.formatProfession(prof));
-                }
-                return entry.toString();
-            }
+        GuildMember m = GuildDataCache.getInstance().getMember(charName);
+        if (m == null) {
+            return charName + " (Level ? Unknown)";
         }
-        return charName;
+        
+        String race = GuildOnlineListPublisher.getRace(charName);
+        String cls = getClassName(m.charClass());
+        int level = m.level() & 0xFF; // byte to unsigned int
+        String attrs = "Level " + level
+            + (race.isEmpty() ? "" : " " + race.trim())
+            + " " + cls;
+        StringBuilder entry = new StringBuilder(charName + " (" + attrs + ")");
+        java.util.List<String> profs = ProfessionManager.getProfessions(charName);
+        for (String prof : profs) {
+            entry.append("\n  \u2022 ").append(ProfessionManager.formatProfession(prof));
+        }
+        return entry.toString();
     }
 
     // -------------------------------------------------------------------------
@@ -408,28 +409,7 @@ public final class GuildRosterPublisher {
     // -------------------------------------------------------------------------
 
     private static Map<String, String> getGuildRosterNotes() {
-        try {
-            Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
-            if (gameOpt == null || gameOpt.isEmpty()) return null;
-            GameCommandHandler handler = gameOpt.get();
-            if (!(handler instanceof GamePacketHandler)) return null;
-
-            GamePacketHandler gph = (GamePacketHandler) handler;
-            scala.collection.Map<Object, GuildMember> roster = gph.guildRoster();
-            if (roster == null || roster.isEmpty()) return null;
-
-            Map<String, String> result = new LinkedHashMap<>();
-            scala.collection.Iterator<GuildMember> it = roster.valuesIterator();
-            while (it.hasNext()) {
-                GuildMember p = it.next();
-                String note = p.officerNote() != null ? p.officerNote().trim() : "";
-                result.put(p.name(), note);
-            }
-            return result;
-        } catch (Throwable t) {
-            System.err.println("[GuildRoster] Error reading guild roster: " + t.getMessage());
-            return null;
-        }
+        return GuildDataCache.getInstance().getOfficerNotes();
     }
 
     // -------------------------------------------------------------------------
