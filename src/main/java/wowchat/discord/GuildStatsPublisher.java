@@ -99,6 +99,29 @@ public final class GuildStatsPublisher {
         factionCounts.put("Alliance", 0);
         factionCounts.put("Horde", 0);
         
+        // Initialize all classes with 0 (Death Knight excluded - not allowed in Hardcore)
+        classCounts.put("Druid", 0);
+        classCounts.put("Hunter", 0);
+        classCounts.put("Mage", 0);
+        classCounts.put("Paladin", 0);
+        classCounts.put("Priest", 0);
+        classCounts.put("Rogue", 0);
+        classCounts.put("Shaman", 0);
+        classCounts.put("Warlock", 0);
+        classCounts.put("Warrior", 0);
+        
+        // Initialize all races with 0
+        raceCounts.put("Draenei", 0);
+        raceCounts.put("Dwarf", 0);
+        raceCounts.put("Gnome", 0);
+        raceCounts.put("Human", 0);
+        raceCounts.put("Night Elf", 0);
+        raceCounts.put("Blood Elf", 0);
+        raceCounts.put("Orc", 0);
+        raceCounts.put("Tauren", 0);
+        raceCounts.put("Troll", 0);
+        raceCounts.put("Undead", 0);
+        
         int level80Count = 0;
 
         for (GuildMember m : members) {
@@ -219,7 +242,6 @@ public final class GuildStatsPublisher {
         // Alliance races
         for (String race : allianceRaces) {
             int count = counts.getOrDefault(race, 0);
-            if (count == 0) continue;
             int pct = (int) Math.round((count * 100.0) / total);
             int bars = (int) Math.round((count / (double) maxCount) * MAX_BAR_LENGTH);
             
@@ -232,7 +254,6 @@ public final class GuildStatsPublisher {
         // Horde races
         for (String race : hordeRaces) {
             int count = counts.getOrDefault(race, 0);
-            if (count == 0) continue;
             int pct = (int) Math.round((count * 100.0) / total);
             int bars = (int) Math.round((count / (double) maxCount) * MAX_BAR_LENGTH);
             
@@ -259,14 +280,13 @@ public final class GuildStatsPublisher {
         int maxDigits = String.valueOf(maxCount).length();
 
         List<String> classOrder = Arrays.asList(
-            "Death Knight", "Druid", "Hunter", "Mage", "Paladin", 
+            "Druid", "Hunter", "Mage", "Paladin", 
             "Priest", "Rogue", "Shaman", "Warlock", "Warrior"
         );
 
         StringBuilder sb = new StringBuilder("```\n");
         for (String cls : classOrder) {
             int count = counts.getOrDefault(cls, 0);
-            if (count == 0) continue;
             int pct = (int) Math.round((count * 100.0) / total);
             int bars = (int) Math.round((count / (double) maxCount) * MAX_BAR_LENGTH);
             
@@ -308,7 +328,20 @@ public final class GuildStatsPublisher {
     }
 
     private static Map<String, Integer> getProfessionCounts() {
-        Map<String, Integer> counts = new HashMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        
+        // Initialize all professions with 0
+        counts.put("Alchemy", 0);
+        counts.put("Blacksmithing", 0);
+        counts.put("Enchanting", 0);
+        counts.put("Engineering", 0);
+        counts.put("Herbalism", 0);
+        counts.put("Inscription", 0);
+        counts.put("Jewelcrafting", 0);
+        counts.put("Leatherworking", 0);
+        counts.put("Mining", 0);
+        counts.put("Skinning", 0);
+        counts.put("Tailoring", 0);
         
         try {
             Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(true);
