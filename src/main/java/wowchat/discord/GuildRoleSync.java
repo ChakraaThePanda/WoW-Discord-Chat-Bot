@@ -1,20 +1,22 @@
 /*
  * GuildRoleSync.java
  *
- * Automatically assigns Discord roles to guild members based on their in-game guild rank.
+ * Automatically syncs Discord roles to guild members based on their in-game guild ranks.
  *
  * HOW IT WORKS:
- *   1. When SMSG_GUILD_ROSTER is received, GuildMember now stores rankIndex and officerNote.
- *   2. Each tick, we iterate the guild roster via GamePacketHandler.guildRoster().
- *   3. For each member, we read their officerNote as a Discord user ID.
- *   4. We look up the Discord user by that ID and assign any roles mapped to their rankIndex.
- *   5. Roles are only ever granted, never removed.
- *   6. If the user already has the role, we skip the API call entirely.
+ *   1. Groups all guild characters by Discord ID (from officer notes)
+ *   2. For each Discord user, collects all their characters' guild ranks
+ *   3. For each rank configured in guildRoleSync:
+ *      - If user has ANY character with that rank → ADD Discord role
+ *      - If user has NO characters with that rank → REMOVE Discord role
+ *   4. Only touches roles defined in guildRoleSync config (other roles untouched)
+ *   5. Handles multi-rank users (e.g., one char Trusted, one char Member → gets both roles)
  *
  * CONFIG (wowchat.conf):
  *   guildRoleSync = [
- *     { guildRank = "Member",  discordRoleId = "123456789012345678" },
- *     { guildRank = "Officer", discordRoleId = "987654321098765432" }
+ *     { guildRank = "Trusted",        discordRoleId = "1475141936498086048" },
+ *     { guildRank = "Discord Linked", discordRoleId = "1496228872033796287" },
+ *     { guildRank = "Member",         discordRoleId = "1475142433988804628" }
  *   ]
  *
  *   Guild members should put their Discord user ID (numeric) in their officer note in-game.
@@ -24,6 +26,10 @@
  * RANK NAMES:
  *   Rank names are matched case-insensitively against the rank names stored in GuildInfo,
  *   which are fetched via SMSG_GUILD_QUERY on login.
+ *
+ * EXAMPLE:
+ *   User has: Char1 (Trusted), Char2 (Member)
+ *   Result: Gets "Trusted" role + "Member" role, "Discord Linked" role removed if they had it
  */
 package wowchat.discord;
 
@@ -117,9 +123,10 @@ public final class GuildRoleSync {
         }
         Guild discordGuild = guilds.get(0);
 
-        int processed = 0, assigned = 0, skipped = 0;
-
-        // Iterate guild roster
+        // Group guild characters by Discord ID and collect their ranks
+        // Map: Discord ID -> Set of rank names (lowercase)
+        Map<String, Set<String>> discordIdToRanks = new HashMap<>();
+        
         scala.collection.Map<Object, GuildMember> roster = handler.guildRoster();
         Iterator<GuildMember> it = roster.valuesIterator();
         while (it.hasNext()) {
@@ -134,42 +141,62 @@ public final class GuildRoleSync {
             String rankName = rankNames.getOrDefault(member.rankIndex(), "").toLowerCase(Locale.ROOT);
             if (rankName.isEmpty()) continue;
 
-            String roleId = rankToRoleId.get(rankName);
-            if (roleId == null) continue;
+            discordIdToRanks
+                .computeIfAbsent(officerNote, k -> new HashSet<>())
+                .add(rankName);
+        }
 
-            processed++;
+        int processed = 0, added = 0, removed = 0, skipped = 0;
+
+        // Now sync roles for each Discord user
+        for (Map.Entry<String, Set<String>> entry : discordIdToRanks.entrySet()) {
+            String discordId = entry.getKey();
+            Set<String> userRanks = entry.getValue(); // Ranks this user has in guild
 
             try {
-                Member discordMember = discordGuild.retrieveMemberById(officerNote).complete();
+                Member discordMember = discordGuild.retrieveMemberById(discordId).complete();
                 if (discordMember == null) continue;
 
-                Role role = discordGuild.getRoleById(roleId);
-                if (role == null) {
-                    System.err.println("[GuildRoleSync] Role ID " + roleId + " not found in Discord guild.");
-                    continue;
-                }
+                processed++;
 
-                // Already has this role — skip
-                if (discordMember.getRoles().contains(role)) {
-                    skipped++;
-                    continue;
-                }
+                // For each configured rank mapping
+                for (Map.Entry<String, String> mapping : rankToRoleId.entrySet()) {
+                    String configuredRank = mapping.getKey(); // lowercase rank name
+                    String roleId = mapping.getValue();
 
-                // Grant the role
-                discordGuild.addRoleToMember(discordMember, role).complete();
-                System.out.println("[GuildRoleSync] Assigned role '" + role.getName() + "' to "
-                    + discordMember.getUser().getName() + " (WoW: " + member.name() + ", rank: " + rankNames.get(member.rankIndex()) + ")");
-                assigned++;
+                    Role role = discordGuild.getRoleById(roleId);
+                    if (role == null) {
+                        System.err.println("[GuildRoleSync] Role ID " + roleId + " not found in Discord guild.");
+                        continue;
+                    }
+
+                    boolean hasRole = discordMember.getRoles().contains(role);
+                    boolean shouldHaveRole = userRanks.contains(configuredRank);
+
+                    if (shouldHaveRole && !hasRole) {
+                        // ADD role
+                        discordGuild.addRoleToMember(discordMember, role).complete();
+                        System.out.println("[GuildRoleSync] ADDED role '" + role.getName() + "' to " + discordMember.getEffectiveName());
+                        added++;
+                    } else if (!shouldHaveRole && hasRole) {
+                        // REMOVE role
+                        discordGuild.removeRoleFromMember(discordMember, role).complete();
+                        System.out.println("[GuildRoleSync] REMOVED role '" + role.getName() + "' from " + discordMember.getEffectiveName());
+                        removed++;
+                    } else {
+                        // No change needed
+                        skipped++;
+                    }
+                }
 
             } catch (Throwable t) {
-                System.err.println("[GuildRoleSync] Failed to process member " + member.name()
-                    + " (Discord ID: " + officerNote + "): " + t.getMessage());
+                System.err.println("[GuildRoleSync] Error syncing roles for Discord ID " + discordId + ": " + t.getMessage());
             }
         }
 
-        if (assigned > 0) {
-            System.out.println("[GuildRoleSync] Tick complete: " + processed + " matched, "
-                + assigned + " role(s) assigned.");
+        if (added > 0 || removed > 0) {
+            System.out.println("[GuildRoleSync] Sync complete. Users: " + processed 
+                + ", Roles added: " + added + ", removed: " + removed);
         }
     }
 
