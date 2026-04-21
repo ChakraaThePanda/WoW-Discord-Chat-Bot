@@ -46,21 +46,15 @@ import java.util.concurrent.TimeUnit;
  */
 public final class GuildRosterPublisher {
 
-    // Separate markers so we can distinguish the two messages in channel history
-    private static final String AUDIT_MARKER  = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
     private static final String ROSTER_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
 
     // Config
     private static volatile long         channelId     = 0L;
-    private static volatile boolean      auditEnabled  = true;
     private static volatile int          updateMinutes = 5;
     private static volatile Set<String>  ignoreLower   = Collections.emptySet();
-    private static volatile List<String> auditRoleIds  = Collections.emptyList();
 
-    // Runtime state - audit message
-    private static volatile boolean started        = false;
-    private static volatile String  auditMessageId = null;
     // Runtime state - roster messages (one per page)
+    private static volatile boolean started = false;
     private static final List<String> rosterMessageIds = new ArrayList<>();
 
     private GuildRosterPublisher() {}
@@ -110,88 +104,17 @@ public final class GuildRosterPublisher {
         Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes();
         if (rosterNotes == null) return;
 
-        List<Guild> guilds = jda.getGuilds();
-        if (guilds.isEmpty()) return;
-        Guild discordGuild = guilds.get(0);
+        // --- Build and post audit embed ---
+        GuildDiscordAuditPublisher.publish(channel);
 
-        // Build set of all linked Discord IDs from officer notes
-        Set<String> linkedDiscordIds = new HashSet<>();
-        for (String note : rosterNotes.values()) {
-            String id = extractDiscordId(note);
-            if (id != null) linkedDiscordIds.add(id);
-        }
-
-        // --- Panel 1: WoW members missing a Discord link ---
-        List<String> unlinkdWoW = new ArrayList<>();
-        for (Map.Entry<String, String> entry : rosterNotes.entrySet()) {
-            String charName = entry.getKey();
-            String note     = entry.getValue();
-            if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
-            String id = extractDiscordId(note);
-            if (id == null || discordGuild.getMemberById(id) == null) {
-                unlinkdWoW.add(charName);
-            }
-        }
-        Collections.sort(unlinkdWoW, String.CASE_INSENSITIVE_ORDER);
-
-        // --- Panel 2: Discord members missing a WoW link, grouped by role ---
-        StringBuilder panel2 = new StringBuilder();
-        for (String roleId : auditRoleIds) {
-            Role role = discordGuild.getRoleById(roleId);
-            if (role == null) continue;
-
-            List<Member> membersWithRole = discordGuild.getMembersWithRoles(role);
-            List<String> unlinkedDiscord = new ArrayList<>();
-            for (Member member : membersWithRole) {
-                if (member.getUser().isBot()) continue;
-                if (!linkedDiscordIds.contains(member.getUser().getId())) {
-                    unlinkedDiscord.add(member.getEffectiveName());
-                }
-            }
-            Collections.sort(unlinkedDiscord, String.CASE_INSENSITIVE_ORDER);
-
-            if (panel2.length() > 0) panel2.append("\n");
-            panel2.append("**").append(role.getName()).append("**");
-            if (unlinkedDiscord.isEmpty()) {
-                panel2.append("\nAll linked.");
-            } else {
-                for (String name : unlinkedDiscord) {
-                    panel2.append("\n- ").append(name);
-                }
-            }
-        }
-
-        // --- Build audit message ---
-        if (auditEnabled) {
-            // Build audit embed description
-            StringBuilder auditDesc = new StringBuilder();
-            auditDesc.append("### Discord Members that aren't linked to any characters in the Guild\n");
-            if (auditRoleIds.isEmpty()) {
-                auditDesc.append("No audit roles configured (guildAuditRoleIds).");
-            } else if (panel2.length() == 0) {
-                auditDesc.append("None of the configured roles were found in this Discord server.");
-            } else {
-                auditDesc.append(panel2);
-            }
-
-            String auditDescStr = auditDesc.toString();
-            if (auditDescStr.length() > 4000) auditDescStr = auditDescStr.substring(0, 3997) + "...";
-
-            MessageEmbed auditEmbed = new EmbedBuilder()
-                .setTitle("Guild Sync Audit")
-                .setDescription(auditDescStr)
-                .setColor(Color.decode("#2b2d31"))
-                .setFooter("Last updated: " + new java.util.Date())
-                .build();
-
-            postOrEditEmbed(channel, auditEmbed, AUDIT_MARKER,
-                id -> auditMessageId = id, () -> auditMessageId, id -> auditMessageId = null);
-        }
-
-        // --- Build and post stats embed (between Audit and Roster) ---
+        // --- Build and post stats embed ---
         GuildStatsPublisher.publish(channel);
 
         // --- Build roster embed ---
+        List<Guild> guilds = jda.getGuilds();
+        if (guilds.isEmpty()) return;
+        Guild discordGuild = guilds.get(0);
+        
         postOrEditRoster(channel, discordGuild, rosterNotes);
     }
 
@@ -471,13 +394,6 @@ public final class GuildRosterPublisher {
                 if (updateMinutes < 1) updateMinutes = 1;
             } catch (ConfigException ignored) {}
 
-            auditEnabled = true;
-            try {
-                if (config.hasPath("guildAuditEnabled")) {
-                    auditEnabled = config.getBoolean("guildAuditEnabled");
-                }
-            } catch (ConfigException ignored) {}
-
             Set<String> ignoreSet = new HashSet<>();
             try {
                 if (config.hasPath("guildOnlineListIgnore")) {
@@ -488,16 +404,6 @@ public final class GuildRosterPublisher {
                 }
             } catch (Throwable ignored) {}
             ignoreLower = ignoreSet.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(ignoreSet);
-
-            List<String> roleList = new ArrayList<>();
-            try {
-                if (config.hasPath("guildAuditRoleIds")) {
-                    for (String id : config.getStringList("guildAuditRoleIds")) {
-                        if (id != null && !id.trim().isEmpty()) roleList.add(id.trim());
-                    }
-                }
-            } catch (Throwable ignored) {}
-            auditRoleIds = roleList.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(roleList);
 
         } catch (Throwable t) {
             System.err.println("[GuildRoster] Failed to load config: " + t.getMessage());
