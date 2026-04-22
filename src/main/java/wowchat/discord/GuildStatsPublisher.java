@@ -122,7 +122,17 @@ public final class GuildStatsPublisher {
         raceCounts.put("Troll", 0);
         raceCounts.put("Undead", 0);
         
-        int level80Count = 0;
+        // Initialize level brackets with 0
+        Map<String, Integer> levelCounts = new LinkedHashMap<>();
+        levelCounts.put("1-10", 0);
+        levelCounts.put("11-20", 0);
+        levelCounts.put("21-30", 0);
+        levelCounts.put("31-40", 0);
+        levelCounts.put("41-50", 0);
+        levelCounts.put("51-60", 0);
+        levelCounts.put("61-70", 0);
+        levelCounts.put("71-79", 0);
+        levelCounts.put("80", 0);
 
         for (GuildMember m : members) {
             // No ignore filter needed - already applied by cache
@@ -142,8 +152,17 @@ public final class GuildStatsPublisher {
             String cls = getClassName(m.charClass());
             classCounts.put(cls, classCounts.getOrDefault(cls, 0) + 1);
             
-            // Level 80s
-            if ((m.level() & 0xFF) >= 80) level80Count++;
+            // Level brackets
+            int level = m.level() & 0xFF;
+            if (level >= 1 && level <= 10) levelCounts.put("1-10", levelCounts.get("1-10") + 1);
+            else if (level >= 11 && level <= 20) levelCounts.put("11-20", levelCounts.get("11-20") + 1);
+            else if (level >= 21 && level <= 30) levelCounts.put("21-30", levelCounts.get("21-30") + 1);
+            else if (level >= 31 && level <= 40) levelCounts.put("31-40", levelCounts.get("31-40") + 1);
+            else if (level >= 41 && level <= 50) levelCounts.put("41-50", levelCounts.get("41-50") + 1);
+            else if (level >= 51 && level <= 60) levelCounts.put("51-60", levelCounts.get("51-60") + 1);
+            else if (level >= 61 && level <= 70) levelCounts.put("61-70", levelCounts.get("61-70") + 1);
+            else if (level >= 71 && level <= 79) levelCounts.put("71-79", levelCounts.get("71-79") + 1);
+            else if (level == 80) levelCounts.put("80", levelCounts.get("80") + 1);
         }
 
         // Profession counts
@@ -156,7 +175,6 @@ public final class GuildStatsPublisher {
         eb.setColor(Color.decode("#2b2d31"));
         eb.setFooter("Last updated: " + new java.util.Date());
 
-        eb.addField("Level 80s", String.valueOf(level80Count), true);
         eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);
         
         // Only show race distribution if we have race data
@@ -164,6 +182,7 @@ public final class GuildStatsPublisher {
         eb.addField("Race Distribution", raceDistribution, false);
         
         eb.addField("Class Distribution", buildClassGraph(classCounts, totalMembers), false);
+        eb.addField("Level Distribution", buildLevelGraph(levelCounts, totalMembers), false);
         eb.addField("Professions", buildProfessionList(profCounts), false);
 
         return eb.build();
@@ -291,6 +310,38 @@ public final class GuildStatsPublisher {
             int bars = (int) Math.round((count / (double) maxCount) * MAX_BAR_LENGTH);
             
             sb.append(String.format("%-17s ", cls + ":"));
+            for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
+            for (int i = 0; i < bars; i++) sb.append("=");
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+        }
+        sb.append("```");
+        return sb.toString();
+    }
+
+    // Level graph: Bracket order
+    private static String buildLevelGraph(Map<String, Integer> counts, int total) {
+        if (total == 0) return "No data";
+        
+        final int MAX_BAR_LENGTH = 20;
+        
+        // Find max count across all level brackets
+        int maxCount = counts.values().stream().max(Integer::compareTo).orElse(0);
+        if (maxCount == 0) return "No data";
+        
+        int maxDigits = String.valueOf(maxCount).length();
+
+        List<String> levelOrder = Arrays.asList(
+            "1-10", "11-20", "21-30", "31-40", "41-50",
+            "51-60", "61-70", "71-79", "80"
+        );
+
+        StringBuilder sb = new StringBuilder("```\n");
+        for (String bracket : levelOrder) {
+            int count = counts.getOrDefault(bracket, 0);
+            int pct = (int) Math.round((count * 100.0) / total);
+            int bars = (int) Math.round((count / (double) maxCount) * MAX_BAR_LENGTH);
+            
+            sb.append(String.format("%-17s ", bracket + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
             sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
