@@ -92,6 +92,14 @@ public final class GuildRosterPublisher {
         // Refresh shared cache once per tick (OPTIMIZATION)
         GuildDataCache.getInstance().refresh();
         
+        // Clean up stale profession entries (1 hour grace period)
+        Collection<GuildMember> currentMembers = GuildDataCache.getInstance().getMembers(true);
+        Set<String> currentMemberNamesLower = new HashSet<>();
+        for (GuildMember m : currentMembers) {
+            currentMemberNamesLower.add(m.name().toLowerCase());
+        }
+        ProfessionManager.cleanupStaleEntries(currentMemberNamesLower);
+        
         JDA jda = GuildOnlineListPublisher.getJda();
         if (jda == null) return;
 

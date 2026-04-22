@@ -33,9 +33,13 @@ public final class ProfessionManager {
 
     public static final int MAX_PROFESSIONS = 2;
     private static final String FILE = "professions.json";
+    private static final long STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 
     // charName (lowercased) -> sorted list of professions
     private static final Map<String, List<String>> data = new LinkedHashMap<>();
+    
+    // charName (lowercased) -> last update timestamp (for cleanup grace period)
+    private static final Map<String, Long> lastUpdated = new LinkedHashMap<>();
 
     // Discord role IDs allowed to manage professions for any character.
     // Loaded from profCommandRoleIds in wowchat.conf.
@@ -70,16 +74,43 @@ public final class ProfessionManager {
         return results;
     }
 
+    /**
+     * Called on every guild roster update. 
+     * 
+     * For members currently in the guild: updates their timestamp to prevent cleanup.
+     * For members not in the guild: only removes if entry is older than 1 hour.
+     * 
+     * This grace period allows characters that leave and rejoin quickly to keep their professions.
+     */
     public static void cleanupStaleEntries(java.util.Set<String> currentMemberNamesLower) {
+        long now = System.currentTimeMillis();
         boolean changed = false;
+        
+        // Update timestamps for current members
+        for (String currentMember : currentMemberNamesLower) {
+            if (data.containsKey(currentMember)) {
+                lastUpdated.put(currentMember, now);
+                changed = true; // Timestamp refresh requires save
+            }
+        }
+        
+        // Remove entries for non-members that are older than 1 hour
         java.util.Iterator<String> it = data.keySet().iterator();
         while (it.hasNext()) {
             String key = it.next();
             if (!currentMemberNamesLower.contains(key)) {
-                it.remove();
-                changed = true;
+                Long timestamp = lastUpdated.get(key);
+                long age = timestamp == null ? 0 : (now - timestamp);
+                if (timestamp == null || age > STALE_THRESHOLD_MS) {
+                    it.remove();
+                    lastUpdated.remove(key);
+                    changed = true;
+                    System.out.println("[ProfessionManager] Removed stale entry for " + key 
+                        + " (not in guild for " + (age / 1000 / 60) + " minutes)");
+                }
             }
         }
+        
         if (changed) {
             save();
         }
@@ -149,6 +180,7 @@ public final class ProfessionManager {
 
         Collections.sort(profs);
         data.put(key, profs);
+        lastUpdated.put(key, System.currentTimeMillis());
         save();
         return null;
     }
@@ -172,8 +204,10 @@ public final class ProfessionManager {
 
         if (profs.isEmpty()) {
             data.remove(key);
+            lastUpdated.remove(key);
         } else {
             data.put(key, profs);
+            lastUpdated.put(key, System.currentTimeMillis());
         }
         save();
         return null;
@@ -254,27 +288,60 @@ public final class ProfessionManager {
             File f = new File(FILE);
             if (!f.exists()) return;
             String json = new String(Files.readAllBytes(Paths.get(FILE)), "UTF-8").trim();
-            // Simple JSON parser: {"charname":["Prof1","Prof2"],...}
             json = json.replaceAll("^\\{|\\}$", "").trim();
             if (json.isEmpty()) return;
-            for (String entry : json.split(",(?=\\s*\"[^\"]+\"\\s*:)")) {
+            
+            // Split by top-level entries (character names)
+            for (String entry : json.split(",\\s*(?=\"[^\"]+\"\\s*:)")) {
                 entry = entry.trim();
-                int colon = entry.indexOf(":");
-                if (colon < 0) continue;
-                String key = entry.substring(0, colon).trim().replaceAll("\"", "").toLowerCase();
-                String val = entry.substring(colon + 1).trim();
-                val = val.replaceAll("^\\[|\\]$", "").trim();
+                int firstColon = entry.indexOf(":");
+                if (firstColon < 0) continue;
+                
+                String key = entry.substring(0, firstColon).trim().replaceAll("\"", "").toLowerCase();
+                String val = entry.substring(firstColon + 1).trim();
+                
                 List<String> profs = new ArrayList<>();
-                for (String p : val.split(",")) {
-                    String prof = p.trim().replaceAll("\"", "");
-                    if (!prof.isEmpty()) profs.add(prof);
+                Long timestamp = null;
+                
+                // Check if new format (object with professions + lastUpdated) or old format (array)
+                if (val.startsWith("{")) {
+                    // New format: { "professions": [...], "lastUpdated": 123456 }
+                    String profsPattern = "\"professions\"\\s*:\\s*\\[([^\\]]*)\\]";
+                    java.util.regex.Pattern p = java.util.regex.Pattern.compile(profsPattern);
+                    java.util.regex.Matcher m = p.matcher(val);
+                    if (m.find()) {
+                        String profsList = m.group(1);
+                        for (String prof : profsList.split(",")) {
+                            String cleanProf = prof.trim().replaceAll("\"", "");
+                            if (!cleanProf.isEmpty()) profs.add(cleanProf);
+                        }
+                    }
+                    
+                    String timestampPattern = "\"lastUpdated\"\\s*:\\s*(\\d+)";
+                    p = java.util.regex.Pattern.compile(timestampPattern);
+                    m = p.matcher(val);
+                    if (m.find()) {
+                        timestamp = Long.parseLong(m.group(1));
+                    }
+                } else {
+                    // Old format: ["Prof1", "Prof2"]
+                    val = val.replaceAll("^\\[|\\]$", "").trim();
+                    for (String prof : val.split(",")) {
+                        String cleanProf = prof.trim().replaceAll("\"", "");
+                        if (!cleanProf.isEmpty()) profs.add(cleanProf);
+                    }
                 }
+                
                 Collections.sort(profs);
-                if (!profs.isEmpty()) data.put(key, profs);
+                if (!profs.isEmpty()) {
+                    data.put(key, profs);
+                    lastUpdated.put(key, timestamp != null ? timestamp : System.currentTimeMillis());
+                }
             }
             System.out.println("[ProfessionManager] Loaded " + data.size() + " character profession entries.");
         } catch (Throwable t) {
             System.err.println("[ProfessionManager] Failed to load professions.json: " + t.getMessage());
+            t.printStackTrace();
         }
     }
 
@@ -285,13 +352,20 @@ public final class ProfessionManager {
             for (Map.Entry<String, List<String>> e : data.entrySet()) {
                 if (!first) sb.append(",\n");
                 first = false;
-                sb.append("  \"").append(e.getKey()).append("\": [");
+                
+                String charName = e.getKey();
                 List<String> profs = e.getValue();
+                Long timestamp = lastUpdated.get(charName);
+                
+                sb.append("  \"").append(charName).append("\": {\n");
+                sb.append("    \"professions\": [");
                 for (int i = 0; i < profs.size(); i++) {
                     if (i > 0) sb.append(", ");
                     sb.append("\"").append(profs.get(i)).append("\"");
                 }
-                sb.append("]");
+                sb.append("],\n");
+                sb.append("    \"lastUpdated\": ").append(timestamp != null ? timestamp : System.currentTimeMillis()).append("\n");
+                sb.append("  }");
             }
             sb.append("\n}");
             Files.write(Paths.get(FILE), sb.toString().getBytes("UTF-8"),
