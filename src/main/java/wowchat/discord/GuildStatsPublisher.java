@@ -17,7 +17,7 @@ import java.util.*;
  */
 public final class GuildStatsPublisher {
 
-    private static final String STATS_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
+    private static final String STATS_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
     
     private static volatile String messageId = null;
 

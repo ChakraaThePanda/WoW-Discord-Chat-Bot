@@ -46,7 +46,17 @@ import java.util.concurrent.TimeUnit;
  */
 public final class GuildRosterPublisher {
 
-    private static final String ROSTER_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
+    // Roster markers: 13+ spaces (Stats is 12, Audit is 11)
+    private static final String ROSTER_MARKER_BASE = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
+    
+    // Generate unique marker for each page by appending zero-width spaces
+    private static String getRosterMarker(int pageIndex) {
+        StringBuilder marker = new StringBuilder(ROSTER_MARKER_BASE);
+        for (int i = 0; i < pageIndex; i++) {
+            marker.append("\u200b"); // Add one zero-width space per page index
+        }
+        return marker.toString();
+    }
 
     // Config
     private static volatile long         channelId     = 0L;
@@ -283,6 +293,8 @@ public final class GuildRosterPublisher {
                 }
             }
         }
+        // Post pages in forward order (1, 2, 3...)
+        // New pages appear at bottom, edits stay in place
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
             String description_prefix = i == 0 ? uniquePlayersCount + " Linked Players\n\n" : "";
@@ -293,8 +305,10 @@ public final class GuildRosterPublisher {
                 .setFooter(i == pages.size() - 1 ? "Last updated: " + new java.util.Date() : null)
                 .build();
 
+            // Use unique marker for each page (supports unlimited pages)
+            String marker = getRosterMarker(i);
             final int idx = i;
-            postOrEditEmbed(channel, embed, ROSTER_MARKER,
+            postOrEditEmbed(channel, embed, marker,
                 id -> rosterMessageIds.set(idx, id),
                 () -> rosterMessageIds.get(idx),
                 id -> rosterMessageIds.set(idx, null));
@@ -366,7 +380,8 @@ public final class GuildRosterPublisher {
                 User author = msg.getAuthor();
                 if (author == null || !author.isBot()) continue;
                 String content = msg.getContentRaw();
-                if (content != null && content.endsWith(marker) && !content.endsWith(marker + "\u200b")) {
+                // Exact match: content must equal marker exactly (not just end with it)
+                if (content != null && content.equals(marker)) {
                     return msg.getId();
                 }
             }
