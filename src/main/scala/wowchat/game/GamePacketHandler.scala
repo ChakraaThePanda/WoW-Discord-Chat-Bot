@@ -781,6 +781,12 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       case None       => Discord.sendMessage(req.messageChannel, msg)
     }
 
+    // Get Discord guild for ownership lookup
+    val discordGuild = Option(wowchat.discord.GuildOnlineListPublisher.getJda()).flatMap { jda =>
+      if (jda.getGuilds.isEmpty) None
+      else Some(jda.getGuilds.get(0))
+    }
+
     // Try to find exact match
     val exactName = req.playerName.toLowerCase
     val exactMatch = displayResults.find(_.playerName.toLowerCase == exactName)
@@ -788,7 +794,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       exactMatch,
       guildInfo,
       guildRoster,
-      guildMember => guildMember.name.equalsIgnoreCase(req.playerName)
+      guildMember => guildMember.name.equalsIgnoreCase(req.playerName),
+      discordGuild
     )
     if (handledResponses.isEmpty) {
       // Exact match not found and no exact match in guild roster. Look for approximate matches.
@@ -798,7 +805,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
           exactMatch,
           guildInfo,
           guildRoster,
-          guildMember => guildMember.name.toLowerCase.contains(exactName)
+          guildMember => guildMember.name.toLowerCase.contains(exactName),
+          discordGuild
         )
         if (approximateMatches.isEmpty) {
           sendWhoMsg(s"No player named ${req.playerName} is currently playing.")
@@ -810,7 +818,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
           CommandHandler.handleWhoResponse(Some(whoResponse),
             guildInfo,
             guildRoster,
-            guildMember => guildMember.name.equalsIgnoreCase(req.playerName)
+            guildMember => guildMember.name.equalsIgnoreCase(req.playerName),
+            discordGuild
           ).foreach(sendWhoMsg)
         })
       }

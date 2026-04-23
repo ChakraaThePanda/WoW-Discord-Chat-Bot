@@ -69,16 +69,37 @@ object CommandHandler extends StrictLogging {
   def handleWhoResponse(whoResponse: Option[WhoResponse],
                         guildInfo: GuildInfo,
                         guildRoster: mutable.Map[Long, GuildMember],
-                        guildRosterMatcherFunc: GuildMember => Boolean): Iterable[String] = {
+                        guildRosterMatcherFunc: GuildMember => Boolean,
+                        discordGuild: Option[net.dv8tion.jda.api.entities.Guild] = None): Iterable[String] = {
+    
+    // Helper to get Discord owner info
+    def getDiscordOwner(charName: String): String = {
+      discordGuild.flatMap { guild =>
+        val notes = wowchat.discord.GuildDataCache.getInstance().getOfficerNotes()
+        if (notes == null) None
+        else {
+          Option(notes.get(charName)).flatMap { note =>
+            val discordIdPattern = "(\\d{17,19})".r
+            discordIdPattern.findFirstIn(note).flatMap { discordId =>
+              Option(guild.getMemberById(discordId)).map { member =>
+                s" (Owned by <@$discordId>)"
+              }
+            }
+          }
+        }
+      }.getOrElse("")
+    }
+    
     whoResponse.map(r => {
-      Seq(s"${r.playerName} ${if (r.guildName.nonEmpty) s"<${r.guildName}> " else ""}is a level ${r.lvl}${r.gender.fold(" ")(g => s" $g ")}${r.race} ${r.cls} currently in ${r.zone}.")
+      val owner = getDiscordOwner(r.playerName)
+      Seq(s"${r.playerName} ${if (r.guildName.nonEmpty) s"<${r.guildName}> " else ""}is a level ${r.lvl}${r.gender.fold(" ")(g => s" $g ")}${r.race} ${r.cls} currently in ${r.zone}.$owner")
     }).getOrElse({
       // Check guild roster
       guildRoster
         .values
         .filter(guildRosterMatcherFunc)
         .map(guildMember => {
-          val cls = new GamePackets{}.Classes.valueOf(guildMember.charClass) // ... should really move that out
+          val cls = new GamePackets{}.Classes.valueOf(guildMember.charClass)
           val days = guildMember.lastLogoff.toInt
           val hours = ((guildMember.lastLogoff * 24) % 24).toInt
           val minutes = ((guildMember.lastLogoff * 24 * 60) % 60).toInt
@@ -89,14 +110,12 @@ object CommandHandler extends StrictLogging {
           val guildNameStr = if (guildInfo != null) {
             s" <${guildInfo.name}>"
           } else {
-            // Welp, some servers don't set guild guid in character selection packet.
-            // The only other way to get this information is through parsing SMSG_UPDATE_OBJECT
-            // and its compressed version which is quite annoying especially across expansions.
             ""
           }
 
+          val owner = getDiscordOwner(guildMember.name)
           s"${guildMember.name}$guildNameStr is a level ${guildMember.level} $cls currently offline. " +
-            s"Last seen$daysStr$hoursStr$minutesStr ago in ${GameResources.AREA.getOrElse(guildMember.zoneId, "Unknown Zone")}."
+            s"Last seen$daysStr$hoursStr$minutesStr ago in ${GameResources.AREA.getOrElse(guildMember.zoneId, "Unknown Zone")}.$owner"
         })
     })
   }
