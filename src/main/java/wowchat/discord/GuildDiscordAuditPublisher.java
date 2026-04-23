@@ -148,11 +148,17 @@ public final class GuildDiscordAuditPublisher {
             }
         }
         
+        // --- Linked Wrong Rank Panel ---
+        StringBuilder linkedWrongRankPanel = buildLinkedWrongRankPanel(rosterNotes, discordGuild);
+        String rankToCheck = getLinkedRankToCheck();
+        
         // --- Rank Mismatch Panel ---
         StringBuilder rankMismatchPanel = buildRankMismatchPanel(rosterNotes, discordGuild);
 
         // --- Build embed description ---
         StringBuilder auditDesc = new StringBuilder();
+        
+        // Panel 1: Discord members not linked
         auditDesc.append("### Discord Members that aren't linked to any characters in the Guild\n");
         if (auditRoleIds.isEmpty()) {
             auditDesc.append("No audit roles configured (guildAuditRoleIds).");
@@ -162,10 +168,20 @@ public final class GuildDiscordAuditPublisher {
             auditDesc.append(panel);
         }
         
-        // Add rank mismatch section (one line spacing)
+        // Panel 2: Linked characters with wrong rank (if configured)
+        if (rankToCheck != null) {
+            auditDesc.append("\n### ").append(rankToCheck).append(" Rank with Discord Link (Should be Promoted)\n");
+            if (linkedWrongRankPanel.length() == 0) {
+                auditDesc.append("None.");
+            } else {
+                auditDesc.append(linkedWrongRankPanel);
+            }
+        }
+        
+        // Panel 3: Rank mismatch
         auditDesc.append("\n### Guild Rank Mismatch\n");
         if (rankMismatchPanel.length() == 0) {
-            auditDesc.append("No mismatches.");
+            auditDesc.append("None.");
         } else {
             auditDesc.append(rankMismatchPanel);
         }
@@ -192,6 +208,74 @@ public final class GuildDiscordAuditPublisher {
     // -------------------------------------------------------------------------
     // Rank Mismatch
     // -------------------------------------------------------------------------
+    
+    private static StringBuilder buildLinkedWrongRankPanel(Map<String, String> rosterNotes, Guild discordGuild) {
+        StringBuilder panel = new StringBuilder();
+        
+        String rankToCheck = getLinkedRankToCheck();
+        if (rankToCheck == null) return panel; // Feature disabled if not configured
+        
+        try {
+            Map<Integer, String> guildRanks = getRankNames();
+            if (guildRanks.isEmpty()) return panel;
+            
+            // Find the rank index for the rank we're checking
+            Integer targetRankIndex = null;
+            for (Map.Entry<Integer, String> entry : guildRanks.entrySet()) {
+                if (entry.getValue().equalsIgnoreCase(rankToCheck)) {
+                    targetRankIndex = entry.getKey();
+                    break;
+                }
+            }
+            
+            if (targetRankIndex == null) return panel; // Rank not found
+            
+            // Find characters at this rank who have Discord IDs
+            List<CharWithOwner> flaggedChars = new ArrayList<>();
+            
+            for (Map.Entry<String, String> entry : rosterNotes.entrySet()) {
+                String charName = entry.getKey();
+                String discordId = extractDiscordId(entry.getValue());
+                
+                if (discordId == null) continue; // No Discord ID
+                
+                GuildMember m = GuildDataCache.getInstance().getMember(charName);
+                if (m == null) continue;
+                
+                // Check if character has the target rank
+                if (m.rankIndex() == targetRankIndex) {
+                    Member discordMember = discordGuild.getMemberById(discordId);
+                    String displayName = discordMember != null ? discordMember.getEffectiveName() : discordId;
+                    flaggedChars.add(new CharWithOwner(charName, discordId, displayName));
+                }
+            }
+            
+            // Sort alphabetically by character name
+            Collections.sort(flaggedChars, (a, b) -> a.charName.compareToIgnoreCase(b.charName));
+            
+            for (CharWithOwner c : flaggedChars) {
+                panel.append("\n- ").append(c.charName).append(" (<@").append(c.discordId).append(">)");
+            }
+            
+        } catch (Throwable t) {
+            System.err.println("[GuildAudit] Error building linked wrong rank panel: " + t.getMessage());
+            t.printStackTrace();
+        }
+        
+        return panel;
+    }
+    
+    private static class CharWithOwner {
+        String charName;
+        String discordId;
+        String displayName;
+        
+        CharWithOwner(String charName, String discordId, String displayName) {
+            this.charName = charName;
+            this.discordId = discordId;
+            this.displayName = displayName;
+        }
+    }
     
     private static StringBuilder buildRankMismatchPanel(Map<String, String> rosterNotes, Guild discordGuild) {
         StringBuilder panel = new StringBuilder();
@@ -401,5 +485,18 @@ public final class GuildDiscordAuditPublisher {
             }
         } catch (Throwable t) {}
         return Collections.emptyList();
+    }
+    
+    private static String getLinkedRankToCheck() {
+        try {
+            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
+            Config config = ConfigFactory.parseFile(new File(configFile))
+                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
+            
+            if (config.hasPath("guildAuditLinkedRankToCheck")) {
+                return config.getString("guildAuditLinkedRankToCheck");
+            }
+        } catch (Throwable t) {}
+        return null;
     }
 }

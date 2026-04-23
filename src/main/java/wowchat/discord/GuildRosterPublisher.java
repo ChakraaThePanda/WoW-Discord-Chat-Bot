@@ -125,14 +125,15 @@ public final class GuildRosterPublisher {
         // --- Build and post audit embed ---
         GuildDiscordAuditPublisher.publish(channel);
         
-        // Delay to avoid Discord rate limits (5 edits per 5 seconds)
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        // Delay to avoid Discord rate limits (5 edits per 5 seconds = 1 per second)
+        // Using 2 seconds to be safe and leave room for other interactions
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
         // --- Build and post stats embed ---
         GuildStatsPublisher.publish(channel);
         
         // Delay to avoid Discord rate limits
-        try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
         // --- Build roster embed ---
         List<Guild> guilds = jda.getGuilds();
@@ -321,7 +322,7 @@ public final class GuildRosterPublisher {
             
             // Delay between pages to avoid Discord rate limits
             if (i < pages.size() - 1) {
-                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
             }
         }
     }
