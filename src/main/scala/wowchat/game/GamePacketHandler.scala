@@ -777,8 +777,13 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
 
     // Helper: send via interaction hook (ephemeral) if available, else normal channel message
     def sendWhoMsg(msg: String): Unit = req.hook match {
-      case Some(hook) => hook.sendMessage(msg).setEphemeral(true).queue()
-      case None       => Discord.sendMessage(req.messageChannel, msg)
+      case Some(hook) =>
+        val button = net.dv8tion.jda.api.interactions.components.buttons.Button.primary("post_who", "Post to Channel")
+        hook.sendMessage(msg)
+          .addActionRow(button)
+          .setEphemeral(true)
+          .queue()
+      case None => Discord.sendMessage(req.messageChannel, msg)
     }
 
     // Get Discord guild for ownership lookup

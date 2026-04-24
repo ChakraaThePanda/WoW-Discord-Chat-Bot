@@ -4,10 +4,13 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -142,7 +145,44 @@ public final class SlashCommandHandler {
                   .append(" \u2014 ").append(display).append("\n");
             }
 
-            event.reply(sb.toString().trim()).setEphemeral(true).queue();
+            String content = sb.toString().trim();
+            Button postButton = Button.primary("post_profession:" + profession, "Post to Channel");
+            event.reply(content)
+                .addActionRow(postButton)
+                .setEphemeral(true)
+                .queue();
+        }
+    }
+    
+    /**
+     * Handle button interactions for "Post to Channel"
+     */
+    public static void handleButtonInteraction(ButtonInteractionEvent event) {
+        String buttonId = event.getComponentId();
+        
+        if (buttonId.startsWith("post_profession:")) {
+            // Extract original message content
+            String originalContent = event.getMessage().getContentRaw();
+            
+            // Post non-ephemerally to channel with mentions disabled to prevent pinging
+            event.getChannel().sendMessage(originalContent)
+                .setAllowedMentions(java.util.Collections.emptyList())
+                .queue();
+            
+            // Acknowledge button click and update original message
+            event.reply("Posted to channel!").setEphemeral(true).queue();
+        } else if (buttonId.equals("post_who")) {
+            // Extract original message content
+            String originalContent = event.getMessage().getContentRaw();
+            
+            // Escape mentions to prevent pinging: <@123> becomes <@!123> or we can use allowed mentions
+            // Post non-ephemerally to channel with mentions disabled
+            event.getChannel().sendMessage(originalContent)
+                .setAllowedMentions(java.util.Collections.emptyList())
+                .queue();
+            
+            // Acknowledge button click
+            event.reply("Posted to channel!").setEphemeral(true).queue();
         }
     }
 }

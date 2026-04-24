@@ -354,6 +354,10 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
         wowchat.discord.SlashCommandHandler.handleProfCommand(event)
     }
   }
+  
+  override def onButtonInteraction(event: net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent): Unit = {
+    wowchat.discord.SlashCommandHandler.handleButtonInteraction(event)
+  }
 
   override def onCommandAutoCompleteInteraction(event: CommandAutoCompleteInteractionEvent): Unit = {
     wowchat.discord.SlashCommandHandler.handleAutoComplete(event)
