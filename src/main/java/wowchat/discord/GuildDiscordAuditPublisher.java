@@ -81,7 +81,15 @@ public final class GuildDiscordAuditPublisher {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            return config.hasPath("guildAuditEnabled") && config.getBoolean("guildAuditEnabled");
+            
+            // Try NEW path first, fall back to OLD
+            if (config.hasPath("guildRoster.audit.enabled")) {
+                return config.getBoolean("guildRoster.audit.enabled");
+            } else if (config.hasPath("guildAuditEnabled")) {
+                return config.getBoolean("guildAuditEnabled");
+            }
+            // Default enabled for backward compat
+            return true;
         } catch (Throwable t) {
             return false;
         }
@@ -480,7 +488,10 @@ public final class GuildDiscordAuditPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
             
-            if (config.hasPath("guildAuditRoleIds")) {
+            // Try NEW path first, fall back to OLD
+            if (config.hasPath("guildRoster.audit.roleIds")) {
+                return config.getStringList("guildRoster.audit.roleIds");
+            } else if (config.hasPath("guildAuditRoleIds")) {
                 return config.getStringList("guildAuditRoleIds");
             }
         } catch (Throwable t) {}
@@ -493,7 +504,10 @@ public final class GuildDiscordAuditPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
             
-            if (config.hasPath("guildAuditLinkedRankToCheck")) {
+            // Try NEW path first, fall back to OLD
+            if (config.hasPath("guildRoster.audit.linkedRankToCheck")) {
+                return config.getString("guildRoster.audit.linkedRankToCheck");
+            } else if (config.hasPath("guildAuditLinkedRankToCheck")) {
                 return config.getString("guildAuditLinkedRankToCheck");
             }
         } catch (Throwable t) {}

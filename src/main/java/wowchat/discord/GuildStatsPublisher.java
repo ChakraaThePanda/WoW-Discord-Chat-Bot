@@ -65,7 +65,15 @@ public final class GuildStatsPublisher {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
             com.typesafe.config.Config config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
                 .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            return config.hasPath("guildRosterStatsEnabled") && config.getBoolean("guildRosterStatsEnabled");
+            
+            // Try NEW path first, fall back to OLD
+            if (config.hasPath("guildRoster.stats.enabled")) {
+                return config.getBoolean("guildRoster.stats.enabled");
+            } else if (config.hasPath("guildRosterStatsEnabled")) {
+                return config.getBoolean("guildRosterStatsEnabled");
+            }
+            // Default enabled for backward compat
+            return true;
         } catch (Throwable t) {
             return false;
         }

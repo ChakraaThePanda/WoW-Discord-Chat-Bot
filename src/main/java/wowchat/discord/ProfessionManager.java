@@ -380,8 +380,15 @@ public final class ProfessionManager {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            if (!config.hasPath("profCommandRoleIds")) return;
-            for (String roleId : config.getStringList("profCommandRoleIds")) {
+            
+            // Try NEW path first, fall back to OLD
+            String configPath = config.hasPath("professions.commandRoleIds")
+                ? "professions.commandRoleIds"
+                : "profCommandRoleIds";
+            
+            if (!config.hasPath(configPath)) return;
+            
+            for (String roleId : config.getStringList(configPath)) {
                 roleId = roleId.trim();
                 if (!roleId.isEmpty()) commandRoleIds.add(roleId);
             }
@@ -390,6 +397,26 @@ public final class ProfessionManager {
             }
         } catch (Throwable t) {
             System.err.println("[ProfessionManager] Could not load officer roles: " + t.getMessage());
+        }
+    }
+    
+    /**
+     * Check if profession cache is enabled in config
+     */
+    public static boolean isCacheEnabled() {
+        try {
+            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
+            Config config = ConfigFactory.parseFile(new File(configFile))
+                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
+            
+            // Check if cache is explicitly disabled
+            if (config.hasPath("professions.cache.enabled")) {
+                return config.getBoolean("professions.cache.enabled");
+            }
+            // Default enabled for backward compat
+            return true;
+        } catch (Throwable t) {
+            return true; // Default enabled
         }
     }
 }

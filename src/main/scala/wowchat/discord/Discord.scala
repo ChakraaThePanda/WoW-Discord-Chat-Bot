@@ -104,10 +104,31 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
       val conf = com.typesafe.config.ConfigFactory.parseFile(
         new java.io.File(System.getProperty("wowchat.configFile", "wowchat.conf")))
         .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true))
-      if (conf.hasPath("guildDeathRoleId")) {
-        val v = conf.getString("guildDeathRoleId").trim
-        if (v.nonEmpty && v != "0" && v.forall(_.isDigit)) Some(v) else None
-      } else None
+      
+      // Check if feature is enabled (NEW path with fallback to OLD behavior)
+      val enabled = if (conf.hasPath("guildDeathNotifications.enabled")) {
+        conf.getBoolean("guildDeathNotifications.enabled")
+      } else if (conf.hasPath("guildDeathRoleId")) {
+        true // Old config exists, assume enabled
+      } else {
+        false
+      }
+      
+      if (!enabled) {
+        None
+      } else {
+        // Try NEW path first, fall back to OLD
+        val roleIdPath = if (conf.hasPath("guildDeathNotifications.roleId")) {
+          "guildDeathNotifications.roleId"
+        } else {
+          "guildDeathRoleId"
+        }
+        
+        if (conf.hasPath(roleIdPath)) {
+          val v = conf.getString(roleIdPath).trim
+          if (v.nonEmpty && v != "0" && v.forall(_.isDigit)) Some(v) else None
+        } else None
+      }
     } catch { case _: Throwable => None }
   }
 

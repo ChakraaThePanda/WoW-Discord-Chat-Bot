@@ -134,8 +134,11 @@ public final class GuildOnlineListPublisher {
 
         loadConfig();
 
-        System.out.println("[GuildOnlineList] Initializing. Channel ID: " + channelId
-            + ", update interval: " + updateMinutes + " min.");
+        // Only log and schedule if feature is actually enabled
+        if (channelId > 0L) {
+            System.out.println("[GuildOnlineList] Initializing. Channel ID: " + channelId
+                + ", update interval: " + updateMinutes + " min.");
+        }
 
         scheduler = Executors.newSingleThreadScheduledExecutor(
             new DaemonThreadFactory("wowchat-online-list"));
@@ -500,13 +503,36 @@ public final class GuildOnlineListPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            // Channel ID - try as long first, then as string
+            // Check if guild online list is enabled
+            boolean enabled = true; // Default enabled for backward compat
+            if (config.hasPath("guildOnlineList.enabled")) {
+                enabled = config.getBoolean("guildOnlineList.enabled");
+            }
+            
+            if (!enabled) {
+                System.out.println("[GuildOnlineList] Feature disabled in config");
+                channelId = 0L;
+                updateMinutes = 5;
+                ignoreLower = Collections.emptySet();
+                statusMessages = Collections.emptyList();
+                rotationActive = false;
+                return;
+            }
+
+            // Channel ID - try NEW path first, fall back to OLD for backward compatibility
             channelId = 0L;
             try {
-                channelId = config.getLong("guildOnlineListChannelId");
+                if (config.hasPath("guildOnlineList.channelId")) {
+                    channelId = config.getLong("guildOnlineList.channelId");
+                } else if (config.hasPath("guildOnlineListChannelId")) {
+                    channelId = config.getLong("guildOnlineListChannelId");
+                }
             } catch (ConfigException.WrongType e) {
                 try {
-                    channelId = Long.parseLong(config.getString("guildOnlineListChannelId").trim());
+                    String idStr = config.hasPath("guildOnlineList.channelId")
+                        ? config.getString("guildOnlineList.channelId")
+                        : config.getString("guildOnlineListChannelId");
+                    channelId = Long.parseLong(idStr.trim());
                 } catch (Throwable ignored) {
                     channelId = 0L;
                 }
@@ -526,11 +552,15 @@ public final class GuildOnlineListPublisher {
                 updateMinutes = 5;
             }
 
-            // Ignore list
+            // Ignore list - NEW path first, fall back to OLD
             Set<String> ignoreSet = new HashSet<>();
             try {
-                if (config.hasPath("guildOnlineListIgnore")) {
-                    for (String name : config.getStringList("guildOnlineListIgnore")) {
+                String ignorePath = config.hasPath("guildOnlineList.ignore")
+                    ? "guildOnlineList.ignore"
+                    : "guildOnlineListIgnore";
+                
+                if (config.hasPath(ignorePath)) {
+                    for (String name : config.getStringList(ignorePath)) {
                         if (name != null && !name.trim().isEmpty()) {
                             ignoreSet.add(name.trim().toLowerCase(Locale.ROOT));
                         }
@@ -545,27 +575,46 @@ public final class GuildOnlineListPublisher {
             // Update shared cache with ignore list (OPTIMIZATION)
             GuildDataCache.getInstance().setIgnoreList(ignoreLower);
 
-            // Status rotation messages
-            List<String> msgList = new ArrayList<>();
-            try {
-                if (config.hasPath("guildStatusMessages")) {
-                    for (String msg : config.getStringList("guildStatusMessages")) {
-                        if (msg != null && !msg.trim().isEmpty()) {
-                            msgList.add(msg.trim());
+            // Check if status rotation is enabled
+            boolean statusEnabled = true; // Default enabled for backward compat
+            if (config.hasPath("guildStatus.enabled")) {
+                statusEnabled = config.getBoolean("guildStatus.enabled");
+            }
+            
+            if (!statusEnabled) {
+                statusMessages = Collections.emptyList();
+                rotationActive = false;
+            } else {
+                // Status rotation messages - NEW path first, fall back to OLD
+                List<String> msgList = new ArrayList<>();
+                try {
+                    String messagesPath = config.hasPath("guildStatus.messages")
+                        ? "guildStatus.messages"
+                        : "guildStatusMessages";
+                    
+                    if (config.hasPath(messagesPath)) {
+                        for (String msg : config.getStringList(messagesPath)) {
+                            if (msg != null && !msg.trim().isEmpty()) {
+                                msgList.add(msg.trim());
+                            }
                         }
                     }
-                }
-            } catch (Throwable ignored) {}
-            statusMessages = msgList.isEmpty()
-                ? Collections.emptyList()
-                : Collections.unmodifiableList(msgList);
+                } catch (Throwable ignored) {}
+                statusMessages = msgList.isEmpty()
+                    ? Collections.emptyList()
+                    : Collections.unmodifiableList(msgList);
 
-            // Status rotation interval
-            try {
-                statusRotateSecs = config.getInt("guildStatusRotateSeconds");
-                if (statusRotateSecs < 5) statusRotateSecs = 5;
-            } catch (ConfigException e) {
-                statusRotateSecs = 60;
+                // Status rotation interval - NEW path first, fall back to OLD
+                try {
+                    if (config.hasPath("guildStatus.rotateSeconds")) {
+                        statusRotateSecs = config.getInt("guildStatus.rotateSeconds");
+                    } else if (config.hasPath("guildStatusRotateSeconds")) {
+                        statusRotateSecs = config.getInt("guildStatusRotateSeconds");
+                    }
+                    if (statusRotateSecs < 5) statusRotateSecs = 5;
+                } catch (ConfigException e) {
+                    statusRotateSecs = 60;
+                }
             }
 
         } catch (Throwable t) {

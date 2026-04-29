@@ -48,10 +48,29 @@ public class DiscordDMHandler extends ListenerAdapter {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            if (!config.hasPath("dmAutoReply")) return;
+            // Check if DM auto-reply is enabled (NEW path with fallback to OLD)
+            boolean enabled = true; // Default enabled for backward compat
+            if (config.hasPath("dmAutoReply.enabled")) {
+                enabled = config.getBoolean("dmAutoReply.enabled");
+            } else if (config.hasPath("dmAutoReply")) {
+                // Old config exists (just the string), assume enabled
+                enabled = true;
+            }
+            
+            if (!enabled) {
+                System.out.println("[DiscordDMHandler] DM auto-reply disabled in config");
+                return;
+            }
 
-            String reply = config.getString("dmAutoReply").trim();
-            if (reply.isEmpty()) return;
+            // Get reply message - NEW path first, fall back to OLD
+            String reply = null;
+            if (config.hasPath("dmAutoReply.message")) {
+                reply = config.getString("dmAutoReply.message").trim();
+            } else if (config.hasPath("dmAutoReply")) {
+                reply = config.getString("dmAutoReply").trim();
+            }
+            
+            if (reply == null || reply.isEmpty()) return;
 
             // Get JDA — reuse cached instance from GuildOnlineListPublisher if available,
             // otherwise find it by type via reflection

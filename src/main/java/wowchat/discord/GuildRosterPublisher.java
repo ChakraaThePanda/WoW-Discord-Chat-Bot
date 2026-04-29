@@ -413,12 +413,35 @@ public final class GuildRosterPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
+            // Check if guild roster is enabled (parent check)
+            boolean enabled = true; // Default enabled for backward compat
+            if (config.hasPath("guildRoster.enabled")) {
+                enabled = config.getBoolean("guildRoster.enabled");
+            }
+            
+            if (!enabled) {
+                System.out.println("[GuildRoster] Feature disabled in config");
+                channelId = 0L;
+                updateMinutes = 5;
+                ignoreLower = Collections.emptySet();
+                return;
+            }
+
+            // Channel ID - try NEW path first, fall back to OLD
             channelId = 0L;
             try {
-                channelId = config.getLong("guildRosterChannelId");
+                if (config.hasPath("guildRoster.channelId")) {
+                    channelId = config.getLong("guildRoster.channelId");
+                } else if (config.hasPath("guildRosterChannelId")) {
+                    channelId = config.getLong("guildRosterChannelId");
+                }
             } catch (ConfigException.WrongType e) {
-                try { channelId = Long.parseLong(config.getString("guildRosterChannelId").trim()); }
-                catch (Throwable ignored) {}
+                try {
+                    String idStr = config.hasPath("guildRoster.channelId")
+                        ? config.getString("guildRoster.channelId")
+                        : config.getString("guildRosterChannelId");
+                    channelId = Long.parseLong(idStr.trim());
+                } catch (Throwable ignored) {}
             } catch (ConfigException.Missing ignored) {}
 
             updateMinutes = 5;
@@ -431,8 +454,13 @@ public final class GuildRosterPublisher {
 
             Set<String> ignoreSet = new HashSet<>();
             try {
-                if (config.hasPath("guildOnlineListIgnore")) {
-                    for (String name : config.getStringList("guildOnlineListIgnore")) {
+                // Check both old and new paths for ignore list
+                String ignorePath = config.hasPath("guildOnlineList.ignore")
+                    ? "guildOnlineList.ignore"
+                    : "guildOnlineListIgnore";
+                
+                if (config.hasPath(ignorePath)) {
+                    for (String name : config.getStringList(ignorePath)) {
                         if (name != null && !name.trim().isEmpty())
                             ignoreSet.add(name.trim().toLowerCase(Locale.ROOT));
                     }
