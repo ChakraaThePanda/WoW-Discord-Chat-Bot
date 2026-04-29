@@ -76,8 +76,11 @@ object WoWChat extends StrictLogging {
     Global.discord = new Discord(new CommonConnectionCallback {
       override def connected: Unit = {
         wowchat.discord.GuildOnlineListPublisher.init()
+        wowchat.discord.GuildStatusRotation.init()
         wowchat.discord.GuildRoleSync.init()
         wowchat.discord.GuildRosterPublisher.init()
+        wowchat.discord.DiscordDMHandler.init()
+        wowchat.discord.AutoGuildInviteHandler.init()
         gameConnectionController.connect
       }
 

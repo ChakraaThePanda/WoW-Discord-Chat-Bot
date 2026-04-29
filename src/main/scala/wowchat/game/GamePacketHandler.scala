@@ -134,7 +134,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
 
   protected def updateGuildiesOnline: Unit = {
     // Only update status directly if custom status rotation is not active
-    if (!wowchat.discord.GuildOnlineListPublisher.rotationActive) {
+    if (!wowchat.discord.GuildStatusRotation.rotationActive) {
       Global.discord.changeGuildStatus(getGuildiesOnlineMessage(true))
     }
   }

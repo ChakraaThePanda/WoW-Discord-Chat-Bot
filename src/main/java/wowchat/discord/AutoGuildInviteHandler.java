@@ -27,7 +27,7 @@ import java.util.ArrayList;
  *   }
  *
  * If the block is absent or triggers is empty, the feature is disabled.
- * whisperEnabled and channels are independent — either or both can be active.
+ * whisperEnabled and channels are independent - either or both can be active.
  */
 public final class AutoGuildInviteHandler {
 
@@ -73,7 +73,7 @@ public final class AutoGuildInviteHandler {
             triggers = Collections.unmodifiableList(parsed);
 
             if (triggers.isEmpty()) {
-                System.err.println("[AutoGuildInvite] triggers list is empty — feature disabled.");
+                System.err.println("[AutoGuildInvite] triggers list is empty - feature disabled.");
                 return;
             }
 
@@ -92,7 +92,7 @@ public final class AutoGuildInviteHandler {
 
             active = whisperEnabled || !channels.isEmpty();
             if (!active) {
-                System.err.println("[AutoGuildInvite] Neither whisperEnabled nor channels configured — feature disabled.");
+                System.err.println("[AutoGuildInvite] Neither whisperEnabled nor channels configured - feature disabled.");
                 return;
             }
 

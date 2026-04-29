@@ -39,8 +39,17 @@ public class DiscordDMHandler extends ListenerAdapter {
     }
 
     /**
+     * Initialize DM auto-reply feature.
+     * Called from WoWChat.main() during startup.
+     */
+    public static void init() {
+        String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
+        register(configFile);
+    }
+
+    /**
      * Loads the dmAutoReply config and registers this listener on the JDA instance.
-     * Called once from GuildOnlineListPublisher during initialization.
+     * Called once from init() during initialization.
      */
     public static void register(String configFile) {
         try {
@@ -72,7 +81,7 @@ public class DiscordDMHandler extends ListenerAdapter {
             
             if (reply == null || reply.isEmpty()) return;
 
-            // Get JDA — reuse cached instance from GuildOnlineListPublisher if available,
+            // Get JDA - reuse cached instance from GuildOnlineListPublisher if available,
             // otherwise find it by type via reflection
             JDA jda = GuildOnlineListPublisher.getJda();
             if (jda == null) {

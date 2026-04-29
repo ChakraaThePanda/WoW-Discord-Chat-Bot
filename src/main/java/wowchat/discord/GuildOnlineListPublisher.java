@@ -98,13 +98,6 @@ public final class GuildOnlineListPublisher {
     private static volatile int     updateMinutes = 5;
     private static volatile Set<String> ignoreLower = Collections.emptySet();
 
-    // Status rotation config
-    private static volatile List<String> statusMessages   = Collections.emptyList();
-    /** When true, GamePacketHandler.updateGuildiesOnline() is suppressed via bytecode patch. */
-    public  static volatile boolean      rotationActive   = false;
-    private static volatile int          statusRotateSecs = 60;
-    private static volatile int          statusIndex      = 0;
-
     // Runtime state
     private static volatile boolean started     = false;
     private static volatile String  messageId   = null;
@@ -166,7 +159,7 @@ public final class GuildOnlineListPublisher {
             }
         }, 10L, HEALTH_WRITE_INTERVAL_SEC, TimeUnit.SECONDS);
 
-        // Discord health heartbeat - separate thread to avoid interfering with rotation
+        // Discord health heartbeat - separate thread for health monitoring
         ScheduledExecutorService discordHealthScheduler = Executors.newSingleThreadScheduledExecutor(
             new DaemonThreadFactory("wowchat-discord-health"));
         discordHealthScheduler.scheduleAtFixedRate(() -> {
@@ -182,19 +175,6 @@ public final class GuildOnlineListPublisher {
             }
         }, 30L, 30L, TimeUnit.SECONDS);
 
-        // Status rotation - only scheduled if messages are configured
-        rotationActive = !statusMessages.isEmpty();
-        if (!statusMessages.isEmpty()) {
-            long rotatePeriod = Math.max(5, statusRotateSecs);
-            scheduler.scheduleAtFixedRate(() -> {
-                try {
-                    rotateStatus();
-                } catch (Throwable t) {
-                    System.err.println("[GuildOnlineList] Error rotating status: " + t.getMessage());
-                }
-            }, 15L, rotatePeriod, TimeUnit.SECONDS);
-        }
-
     }
 
     // -------------------------------------------------------------------------
@@ -206,52 +186,9 @@ public final class GuildOnlineListPublisher {
     // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
-    // Status rotation - cycles through guildStatusMessages on a fixed timer.
-    // Replaces {online-members} with "N Guild Member" or "N Guild Members" (pluralized).
-    // Calls Discord.changeGuildStatus() directly, same as the bot does internally.
     // -------------------------------------------------------------------------
-
-    private static void rotateStatus() {
-        if (statusMessages.isEmpty()) return;
-
-        // Pick next message in rotation
-        String template = statusMessages.get(statusIndex % statusMessages.size());
-        statusIndex++;
-
-        // Resolve {online-members} if present - returns "1 Guild Member" or "N Guild Members"
-        String message = template;
-        if (message.contains("{online-members}")) {
-            int count = getOnlineCount();
-            String membersLabel = count == 1 ? "1 Guild Member" : count + " Guild Members";
-            message = message.replace("{online-members}", membersLabel);
-        }
-
-        // Push to Discord presence
-        try {
-            Global$.MODULE$.discord().changeGuildStatus(message);
-        } catch (Throwable t) {
-            System.err.println("[GuildOnlineList] Failed to set Discord status: " + t.getMessage());
-        }
-    }
-
-    // Returns the number of online guild members (excluding the bot character).
-    private static int getOnlineCount() {
-        try {
-            Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
-            if (gameOpt == null || gameOpt.isEmpty()) return 0;
-            GameCommandHandler handler = gameOpt.get();
-            if (!(handler instanceof GamePacketHandler)) return 0;
-            // buildGuildiesOnline() excludes the bot character, same as ?online
-            // getGuildiesOnlineMessage(true) returns "N Guild Members online" - parse the count from there
-            String msg = ((GamePacketHandler) handler).getGuildiesOnlineMessage(true);
-            // format: "N Guild Members online" or "1 Guild Member online"
-            String[] parts = msg.split(" ");
-            if (parts.length > 0) return Integer.parseInt(parts[0]);
-        } catch (Throwable t) {
-            // ignore - return 0 safely
-        }
-        return 0;
-    }
+    // Health file writer - called every 30s by the scheduler
+    // -------------------------------------------------------------------------
 
     private static void writeHealthFile() {
         try {
@@ -477,7 +414,7 @@ public final class GuildOnlineListPublisher {
 
                 if (value instanceof JDA) {
                     cachedJda = (JDA) value; // Cache it - never reflect again
-                    System.out.println("[GuildOnlineList] JDA instance found and cached via reflection.");
+                    // JDA instance cached successfully (used by multiple features)
                     return cachedJda;
                 }
             }
@@ -514,107 +451,62 @@ public final class GuildOnlineListPublisher {
                 channelId = 0L;
                 updateMinutes = 5;
                 ignoreLower = Collections.emptySet();
-                statusMessages = Collections.emptyList();
-                rotationActive = false;
-                return;
-            }
-
-            // Channel ID - try NEW path first, fall back to OLD for backward compatibility
-            channelId = 0L;
-            try {
-                if (config.hasPath("guildOnlineList.channelId")) {
-                    channelId = config.getLong("guildOnlineList.channelId");
-                } else if (config.hasPath("guildOnlineListChannelId")) {
-                    channelId = config.getLong("guildOnlineListChannelId");
-                }
-            } catch (ConfigException.WrongType e) {
+            } else {
+                // Channel ID - try NEW path first, fall back to OLD for backward compatibility
+                channelId = 0L;
                 try {
-                    String idStr = config.hasPath("guildOnlineList.channelId")
-                        ? config.getString("guildOnlineList.channelId")
-                        : config.getString("guildOnlineListChannelId");
-                    channelId = Long.parseLong(idStr.trim());
-                } catch (Throwable ignored) {
+                    if (config.hasPath("guildOnlineList.channelId")) {
+                        channelId = config.getLong("guildOnlineList.channelId");
+                    } else if (config.hasPath("guildOnlineListChannelId")) {
+                        channelId = config.getLong("guildOnlineListChannelId");
+                    }
+                } catch (ConfigException.WrongType e) {
+                    try {
+                        String idStr = config.hasPath("guildOnlineList.channelId")
+                            ? config.getString("guildOnlineList.channelId")
+                            : config.getString("guildOnlineListChannelId");
+                        channelId = Long.parseLong(idStr.trim());
+                    } catch (Throwable ignored) {
+                        channelId = 0L;
+                    }
+                } catch (ConfigException.Missing e) {
                     channelId = 0L;
                 }
-            } catch (ConfigException.Missing e) {
-                channelId = 0L;
-            }
 
-            // Update interval - new key with fallback to old key for backward compatibility
-            try {
-                if (config.hasPath("discordFeaturesUpdateMinutes")) {
-                    updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
-                } else {
-                    updateMinutes = config.getInt("guildOnlineListUpdateMinutes");
-                }
-                if (updateMinutes < 1) updateMinutes = 1;
-            } catch (ConfigException e) {
-                updateMinutes = 5;
-            }
-
-            // Ignore list - NEW path first, fall back to OLD
-            Set<String> ignoreSet = new HashSet<>();
-            try {
-                String ignorePath = config.hasPath("guildOnlineList.ignore")
-                    ? "guildOnlineList.ignore"
-                    : "guildOnlineListIgnore";
-                
-                if (config.hasPath(ignorePath)) {
-                    for (String name : config.getStringList(ignorePath)) {
-                        if (name != null && !name.trim().isEmpty()) {
-                            ignoreSet.add(name.trim().toLowerCase(Locale.ROOT));
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
-
-            ignoreLower = ignoreSet.isEmpty()
-                ? Collections.emptySet()
-                : Collections.unmodifiableSet(ignoreSet);
-
-            // Update shared cache with ignore list (OPTIMIZATION)
-            GuildDataCache.getInstance().setIgnoreList(ignoreLower);
-
-            // Check if status rotation is enabled
-            boolean statusEnabled = true; // Default enabled for backward compat
-            if (config.hasPath("guildStatus.enabled")) {
-                statusEnabled = config.getBoolean("guildStatus.enabled");
-            }
-            
-            if (!statusEnabled) {
-                statusMessages = Collections.emptyList();
-                rotationActive = false;
-            } else {
-                // Status rotation messages - NEW path first, fall back to OLD
-                List<String> msgList = new ArrayList<>();
+                // Update interval - new key with fallback to old key for backward compatibility
                 try {
-                    String messagesPath = config.hasPath("guildStatus.messages")
-                        ? "guildStatus.messages"
-                        : "guildStatusMessages";
+                    if (config.hasPath("discordFeaturesUpdateMinutes")) {
+                        updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
+                    } else {
+                        updateMinutes = config.getInt("guildOnlineListUpdateMinutes");
+                    }
+                    if (updateMinutes < 1) updateMinutes = 1;
+                } catch (ConfigException e) {
+                    updateMinutes = 5;
+                }
+
+                // Ignore list - NEW path first, fall back to OLD
+                Set<String> ignoreSet = new HashSet<>();
+                try {
+                    String ignorePath = config.hasPath("guildOnlineList.ignore")
+                        ? "guildOnlineList.ignore"
+                        : "guildOnlineListIgnore";
                     
-                    if (config.hasPath(messagesPath)) {
-                        for (String msg : config.getStringList(messagesPath)) {
-                            if (msg != null && !msg.trim().isEmpty()) {
-                                msgList.add(msg.trim());
+                    if (config.hasPath(ignorePath)) {
+                        for (String name : config.getStringList(ignorePath)) {
+                            if (name != null && !name.trim().isEmpty()) {
+                                ignoreSet.add(name.trim().toLowerCase(Locale.ROOT));
                             }
                         }
                     }
                 } catch (Throwable ignored) {}
-                statusMessages = msgList.isEmpty()
-                    ? Collections.emptyList()
-                    : Collections.unmodifiableList(msgList);
 
-                // Status rotation interval - NEW path first, fall back to OLD
-                try {
-                    if (config.hasPath("guildStatus.rotateSeconds")) {
-                        statusRotateSecs = config.getInt("guildStatus.rotateSeconds");
-                    } else if (config.hasPath("guildStatusRotateSeconds")) {
-                        statusRotateSecs = config.getInt("guildStatusRotateSeconds");
-                    }
-                    if (statusRotateSecs < 5) statusRotateSecs = 5;
-                } catch (ConfigException e) {
-                    statusRotateSecs = 60;
-                }
+                ignoreLower = ignoreSet.isEmpty()
+                    ? Collections.emptySet()
+                    : Collections.unmodifiableSet(ignoreSet);
+
+                // Update shared cache with ignore list (OPTIMIZATION)
+                GuildDataCache.getInstance().setIgnoreList(ignoreLower);
             }
 
         } catch (Throwable t) {
@@ -624,13 +516,6 @@ public final class GuildOnlineListPublisher {
             updateMinutes = 5;
             ignoreLower   = Collections.emptySet();
         }
-
-        // Register DM auto-reply handler
-        String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-        DiscordDMHandler.register(configFile);
-
-        // Initialize whisper invite handler
-        AutoGuildInviteHandler.init();
     }
 
     // -------------------------------------------------------------------------
