@@ -322,9 +322,11 @@ public final class GuildRosterPublisher {
             
             // Build header with linked players count and optional inactive count
             StringBuilder headerBuilder = new StringBuilder();
-            headerBuilder.append(uniquePlayersCount).append(" Linked Players\n");
+            headerBuilder.append(uniquePlayersCount)
+                .append(uniquePlayersCount == 1 ? " Linked Player\n" : " Linked Players\n");
             if (inactiveCount > 0 && isInactivityEnabled()) {
-                headerBuilder.append(inactiveCount).append(" Inactive Players\n");
+                headerBuilder.append(inactiveCount)
+                    .append(inactiveCount == 1 ? " Inactive Player\n" : " Inactive Players\n");
             }
             headerBuilder.append("\n");
             String description_prefix = i == 0 ? headerBuilder.toString() : "";
