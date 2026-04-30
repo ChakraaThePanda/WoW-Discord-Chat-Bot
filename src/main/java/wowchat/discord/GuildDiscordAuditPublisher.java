@@ -482,7 +482,7 @@ public final class GuildDiscordAuditPublisher {
         return null;
     }
     
-    private static List<String> getAuditRoleIds() {
+    public static List<String> getAuditRoleIds() {
         try {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
             Config config = ConfigFactory.parseFile(new File(configFile))
