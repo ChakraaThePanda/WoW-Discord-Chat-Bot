@@ -95,12 +95,36 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   }
 
   private def runGuildRosterExecutor: Unit = {
+    // Only poll roster if features actually need it
+    val needsRoster = isAnyRosterFeatureEnabled()
+    if (!needsRoster) {
+      logger.info("Guild roster polling disabled - no features require it")
+      return
+    }
+    
     executorService.scheduleWithFixedDelay(() => {
       // Enforce updating guild roster only once per minute
       if (System.currentTimeMillis - lastRequestedGuildRoster >= 60000) {
         updateGuildRoster
       }
     }, 61, 61, TimeUnit.SECONDS)
+  }
+  
+  private def isAnyRosterFeatureEnabled(): Boolean = {
+    try {
+      val configFile = System.getProperty("wowchat.configFile", "wowchat.conf")
+      val config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
+        .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true))
+      
+      // Check if any feature that needs roster polling is enabled
+      val onlineListEnabled = !config.hasPath("guildOnlineList.enabled") || config.getBoolean("guildOnlineList.enabled")
+      val rosterEnabled = !config.hasPath("guildRoster.enabled") || config.getBoolean("guildRoster.enabled")
+      val roleSyncEnabled = !config.hasPath("guildRoleSync.enabled") || config.getBoolean("guildRoleSync.enabled")
+      
+      onlineListEnabled || rosterEnabled || roleSyncEnabled
+    } catch {
+      case _: Throwable => true // Default to enabled if config check fails
+    }
   }
 
   def buildGuildiesOnline: String = {
@@ -495,7 +519,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     gameEventCallback.connected
     runKeepAliveExecutor
     runGuildRosterExecutor
-    if (guildGuid != 0) {
+    
+    // Only query guild info if roster-dependent features are enabled
+    if (guildGuid != 0 && isAnyRosterFeatureEnabled()) {
       queryGuildName
       updateGuildRoster
     }
