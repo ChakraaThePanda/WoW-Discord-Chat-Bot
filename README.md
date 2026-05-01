@@ -1,5 +1,6 @@
 # WoW-Discord-Chat-Bot
-Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for use on the server Frostmourne of Stormforge.gg.
+Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for use on 3.3.5 WOTLK Private Servers, mainly.
+If you have any questions, feel free to add me on Discord: Chakraa
 
 ---
 
@@ -14,6 +15,7 @@ Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added fun
 * show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
 * Watchdog — separate process monitors bot health and restarts it automatically if the WoW connection dies or Discord relay breaks silently
 * Guild Death Ping — automatically mentions a configured Discord role when a guild member dies in-game
+* and more!
 
 ---
 
@@ -21,8 +23,7 @@ Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added fun
 
 #### Running
 * Run `run.bat` (or `run.sh` on Linux) — this starts the watchdog which manages the bot automatically
-* For headless/background operation on Windows, use `run-headless.bat` instead
-* To run on Windows startup, place a shortcut to `run-headless.bat` in your Windows Startup folder (`shell:startup`)
+* To run on Windows startup, place a shortcut to `run.bat` in your Windows Startup folder (`shell:startup`)
 
 #### Linking Discord accounts (for Guild Role Sync, Roster and Audit)
 1. Enable Developer Mode in Discord: User Settings → Advanced → Developer Mode
