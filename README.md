@@ -1,7 +1,7 @@
 # WoW-Discord-Chat-Bot
 Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for use on 3.3.5 WOTLK Private Servers, mainly.
 
-If you have any questions, feel free to add me on Discord: Chakraa
+If you have any questions, feel free to add me on Discord: **Chakraa**
 
 ---
 
