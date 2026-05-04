@@ -148,6 +148,15 @@ public final class GuildRoleSync {
 
         int processed = 0, added = 0, removed = 0, skipped = 0;
 
+        // Build reverse mapping: roleId -> Set of ranks that grant it
+        // This handles multiple ranks mapping to the same role
+        Map<String, Set<String>> roleIdToRanks = new HashMap<>();
+        for (Map.Entry<String, String> mapping : rankToRoleId.entrySet()) {
+            String rank = mapping.getKey();
+            String roleId = mapping.getValue();
+            roleIdToRanks.computeIfAbsent(roleId, k -> new HashSet<>()).add(rank);
+        }
+
         // Now sync roles for each Discord user
         for (Map.Entry<String, Set<String>> entry : discordIdToRanks.entrySet()) {
             String discordId = entry.getKey();
@@ -159,10 +168,10 @@ public final class GuildRoleSync {
 
                 processed++;
 
-                // For each configured rank mapping
-                for (Map.Entry<String, String> mapping : rankToRoleId.entrySet()) {
-                    String configuredRank = mapping.getKey(); // lowercase rank name
-                    String roleId = mapping.getValue();
+                // For each unique role (not each rank mapping)
+                for (Map.Entry<String, Set<String>> roleMapping : roleIdToRanks.entrySet()) {
+                    String roleId = roleMapping.getKey();
+                    Set<String> ranksForThisRole = roleMapping.getValue();
 
                     Role role = discordGuild.getRoleById(roleId);
                     if (role == null) {
@@ -171,7 +180,8 @@ public final class GuildRoleSync {
                     }
 
                     boolean hasRole = discordMember.getRoles().contains(role);
-                    boolean shouldHaveRole = userRanks.contains(configuredRank);
+                    // User should have role if they have ANY of the ranks that grant it
+                    boolean shouldHaveRole = userRanks.stream().anyMatch(ranksForThisRole::contains);
 
                     if (shouldHaveRole && !hasRole) {
                         // ADD role
