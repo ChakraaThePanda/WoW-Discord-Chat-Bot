@@ -1,7 +1,9 @@
 # WoW-Discord-Chat-Bot
 Recomp of a bot from [@fjaros](https://github.com/fjaros/wowchat) with added functionalities for use on 3.3.5 WOTLK Private Servers, mainly.
 
-If you have any questions, feel free to add me on Discord: **Chakraa**
+Feel free to follow [their guide](https://github.com/fjaros/wowchat) on how to do the initial bot setup.
+
+If you have any questions, add me on Discord: **Chakraa**
 
 ---
 
@@ -22,15 +24,13 @@ If you have any questions, feel free to add me on Discord: **Chakraa**
 
 ### How to Use
 
-#### Running
-* Run `run.bat` (or `run.sh` on Linux) — this starts the watchdog which manages the bot automatically
-* To run on Windows startup, place a shortcut to `run.bat` in your Windows Startup folder (`shell:startup`)
+#### Download
+* Head to the [latest release page](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot/releases) to check out the latest changes and download the [Source code (zip)](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot/archive/refs/heads/main.zip)
 
-#### Linking Discord accounts (for Guild Role Sync, Roster and Audit)
-1. Enable Developer Mode in Discord: User Settings → Advanced → Developer Mode
-2. Right-click your username anywhere in Discord and click **Copy User ID**
-3. Log into WoW, open the Guild panel, find your character, and paste your User ID into your **Officer Note**
-4. The bot syncs automatically every few minutes
+#### Running the Bot
+* Open the ``wowchat.conf`` to configure the bot to your liking
+* Run `run.bat` (or `run.sh` on Linux) — this starts the watchdog which manages the bot automatically in case of server restarts
+* To run on Windows startup, place a shortcut to `run.bat` in your Windows Startup folder (`shell:startup`)
 
 #### Configuration
 All features are documented and optional in `wowchat.conf`. Features are disabled by default — set the relevant channel IDs or enable flags to activate them.
@@ -38,15 +38,20 @@ All features are documented and optional in `wowchat.conf`. Features are disable
 ---
 
 ## Helpful Guide for the Guild Roster Module
-This module allows you to link your characters in-game to your Discord account through your Discord ID, enabling many features like:
+If activated, this module allows you to link your characters in-game to your Discord account through your Discord ID, enabling many features like:
 * Showing all your characters under your Discord Tag in the Guild Roster panel
 * Showing your ownership next to your characters in the Who's Online panel
 * Showing your ownership when using the ``/who`` command
 * Enabling the use of ``/profession`` commands for your registered characters
 * Etc.
 
-### How to Link your Discord to your Characters
-You can check the image below to quickly see how to find your Discord User ID and where to place it, in the Officer's Notes in game.
+<ins>**Each member of your guild will need to follow these steps if they want to link their characters properly.**</ins>
+
+### How to Link your Discord ID to your Characters
+1. Enable Developer Mode in Discord: User Settings → Advanced → Developer Mode
+2. Right-click your username anywhere in Discord and click **Copy User ID**
+3. Log into WoW, open the Guild panel, find your character, and paste your User ID into your **Officer Note**
+4. The bot syncs automatically
 ![Discord Link Explanation](assets/images/discord-link.png)
 
 ### Adding Professions to your Characters
