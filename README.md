@@ -34,3 +34,23 @@ If you have any questions, feel free to add me on Discord: **Chakraa**
 
 #### Configuration
 All features are documented and optional in `wowchat.conf`. Features are disabled by default — set the relevant channel IDs or enable flags to activate them.
+
+---
+
+## Helpful Guide for the Guild Roster Module
+This module allows you to link your characters in-game to your Discord account through your Discord ID, enabling many features like:
+* Showing all your characters under your Discord Tag in the Guild Roster panel
+* Showing your ownership next to your characters in the Who's Online panel
+* Showing your ownership when using the ``/who`` command
+* Enabling the use of ``/profession`` commands for your registered characters
+* Etc.
+
+### How to Link your Discord to your Characters
+You can check the image below to quickly see how to find your Discord User ID and where to place it, in the Officer's Notes in game.
+![Discord Link Explanation](assets/images/discord-link.png)
+
+### Adding Professions to your Characters
+Following the Discord Link, you can use the bot's slash commands to add your professions to your characters to show up in ⁠guild-roster.
+
+Using ``/professions list`` will show every character with the selected professions and their skill rank if you are looking for someone to help.
+![Professions Explanation](assets/images/professions.gif)
