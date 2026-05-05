@@ -46,18 +46,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class GuildRosterPublisher {
 
-    // Roster markers: 13+ spaces (Stats is 12, Audit is 11)
-    private static final String ROSTER_MARKER_BASE = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
-    
-    // Generate unique marker for each page by appending zero-width spaces
-    private static String getRosterMarker(int pageIndex) {
-        StringBuilder marker = new StringBuilder(ROSTER_MARKER_BASE);
-        for (int i = 0; i < pageIndex; i++) {
-            marker.append("\u200b"); // Add one zero-width space per page index
-        }
-        return marker.toString();
-    }
-
     // Config
     private static volatile long         channelId     = 0L;
     private static volatile int          updateMinutes = 5;
@@ -122,25 +110,6 @@ public final class GuildRosterPublisher {
         Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes();
         if (rosterNotes == null) return;
 
-        // Get Discord guild for inactivity processing
-        List<Guild> guilds = jda.getGuilds();
-        if (guilds.isEmpty()) return;
-        Guild discordGuild = guilds.get(0);
-        
-        // Get raw roster for inactivity checking
-        scala.collection.mutable.Map<Object, GuildMember> rawRoster = GuildDataCache.getInstance().getRawRoster();
-        Map<Long, Object> guildMembers = new HashMap<>();
-        if (rawRoster != null) {
-            scala.collection.Iterator<scala.Tuple2<Object, GuildMember>> it = rawRoster.iterator();
-            while (it.hasNext()) {
-                scala.Tuple2<Object, GuildMember> entry = it.next();
-                guildMembers.put((Long) entry._1(), entry._2());
-            }
-        }
-        
-        // Process inactivity (assigns/removes Discord roles)
-        int inactiveCount = GuildInactivityManager.processInactivity(discordGuild, guildMembers);
-
         // --- Build and post audit embed ---
         GuildDiscordAuditPublisher.publish(channel);
         
@@ -155,7 +124,11 @@ public final class GuildRosterPublisher {
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
         // --- Build roster embed ---
-        postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
+        List<Guild> guilds = jda.getGuilds();
+        if (guilds.isEmpty()) return;
+        Guild discordGuild = guilds.get(0);
+        
+        postOrEditRoster(channel, discordGuild, rosterNotes);
     }
 
     // -------------------------------------------------------------------------
@@ -203,7 +176,7 @@ public final class GuildRosterPublisher {
     // Guild Roster embed
     // -------------------------------------------------------------------------
 
-    private static void postOrEditRoster(TextChannel channel, Guild discordGuild, Map<String, String> rosterNotes, int inactiveCount) {
+    private static void postOrEditRoster(TextChannel channel, Guild discordGuild, Map<String, String> rosterNotes) {
         // Get full roster for attribute lookup
         scala.collection.Map<Object, GuildMember> finalRoster = null;
         try {
@@ -319,29 +292,23 @@ public final class GuildRosterPublisher {
         // New pages appear at bottom, edits stay in place
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
+            String description_prefix = i == 0 ? uniquePlayersCount + " Linked Players\n\n" : "";
             
-            // Build header with linked players count and optional inactive count
-            StringBuilder headerBuilder = new StringBuilder();
-            headerBuilder.append(uniquePlayersCount)
-                .append(uniquePlayersCount == 1 ? " Linked Player\n" : " Linked Players\n");
-            if (inactiveCount > 0 && isInactivityEnabled()) {
-                headerBuilder.append(inactiveCount)
-                    .append(inactiveCount == 1 ? " Inactive Player\n" : " Inactive Players\n");
+            // Footer format: "GuildName (RealmName) • Page X/Y • Last updated: ..."
+            String footerText = null;
+            if (i == pages.size() - 1) {
+                footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date();
             }
-            headerBuilder.append("\n");
-            String description_prefix = i == 0 ? headerBuilder.toString() : "";
             
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
                 .setDescription(description_prefix + pages.get(i))
                 .setColor(Color.decode("#2b2d31"))
-                .setFooter(i == pages.size() - 1 ? "Last updated: " + new java.util.Date() : null)
+                .setFooter(footerText)
                 .build();
 
-            // Use unique marker for each page (supports unlimited pages)
-            String marker = getRosterMarker(i);
             final int idx = i;
-            postOrEditEmbed(channel, embed, marker,
+            postOrEditEmbed(channel, embed, title,
                 id -> rosterMessageIds.set(idx, id),
                 () -> rosterMessageIds.get(idx),
                 id -> rosterMessageIds.set(idx, null));
@@ -360,16 +327,15 @@ public final class GuildRosterPublisher {
     private interface Setter { void set(String id); }
     private interface Getter { String get(); }
 
-    private static void postOrEditEmbed(TextChannel channel, MessageEmbed embed, String marker,
+    private static void postOrEditEmbed(TextChannel channel, MessageEmbed embed, String pageTitle,
                                         Setter setId, Getter getId, Setter clearId) {
         if (getId.get() == null) {
-            setId.set(findExistingMessageId(channel, marker));
+            setId.set(GuildEmbedUtil.findEmbedByTitleAndFooter(channel, pageTitle));
         }
 
         if (getId.get() == null) {
             try {
                 Message sent = channel.sendMessageEmbeds(embed)
-                    .setContent(marker)
                     .complete();
                 setId.set(sent.getId());
             } catch (Throwable t) {
@@ -377,7 +343,7 @@ public final class GuildRosterPublisher {
             }
         } else {
             try {
-                channel.editMessageById(getId.get(), marker)
+                channel.editMessageById(getId.get(), " ")
                     .setEmbeds(embed)
                     .complete();
             } catch (Throwable t) {
@@ -403,29 +369,6 @@ public final class GuildRosterPublisher {
         if (note == null || note.isEmpty()) return null;
         String trimmed = note.trim();
         if (trimmed.matches("\\d{17,19}")) return trimmed;
-        return null;
-    }
-
-    // -------------------------------------------------------------------------
-    // Find our previously posted message in channel history by marker
-    // -------------------------------------------------------------------------
-
-    private static String findExistingMessageId(TextChannel channel, String marker) {
-        try {
-            List<Message> history = channel.getHistory().retrievePast(100).complete();
-            if (history == null) return null;
-            for (Message msg : history) {
-                User author = msg.getAuthor();
-                if (author == null || !author.isBot()) continue;
-                String content = msg.getContentRaw();
-                // Exact match: content must equal marker exactly (not just end with it)
-                if (content != null && content.equals(marker)) {
-                    return msg.getId();
-                }
-            }
-        } catch (Throwable t) {
-            System.err.println("[GuildRoster] Error searching message history: " + t.getMessage());
-        }
         return null;
     }
 
@@ -497,19 +440,6 @@ public final class GuildRosterPublisher {
         } catch (Throwable t) {
             System.err.println("[GuildRoster] Failed to load config: " + t.getMessage());
             channelId = 0L;
-        }
-    }
-    
-    private static boolean isInactivityEnabled() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            return config.hasPath("guildRoster.inactivity.enabled") 
-                && config.getBoolean("guildRoster.inactivity.enabled");
-        } catch (Throwable t) {
-            return false;
         }
     }
 }

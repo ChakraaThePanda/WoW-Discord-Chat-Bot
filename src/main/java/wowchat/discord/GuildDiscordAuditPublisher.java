@@ -32,8 +32,6 @@ import java.util.*;
  */
 public final class GuildDiscordAuditPublisher {
 
-    private static final String AUDIT_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
-    
     private static volatile String auditMessageId = null;
 
     private GuildDiscordAuditPublisher() {}
@@ -47,14 +45,13 @@ public final class GuildDiscordAuditPublisher {
 
             // Try to find existing message on first run
             if (auditMessageId == null) {
-                auditMessageId = findExistingMessageId(channel, AUDIT_MARKER);
+                auditMessageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Sync Audit");
             }
 
             // Post new or edit existing
             if (auditMessageId == null) {
                 try {
                     Message sent = channel.sendMessageEmbeds(embed)
-                        .setContent(AUDIT_MARKER)
                         .complete();
                     auditMessageId = sent.getId();
                 } catch (Throwable t) {
@@ -62,7 +59,7 @@ public final class GuildDiscordAuditPublisher {
                 }
             } else {
                 try {
-                    channel.editMessageById(auditMessageId, AUDIT_MARKER)
+                    channel.editMessageById(auditMessageId, " ")
                         .setEmbeds(embed)
                         .complete();
                 } catch (Throwable t) {
@@ -93,24 +90,6 @@ public final class GuildDiscordAuditPublisher {
         } catch (Throwable t) {
             return false;
         }
-    }
-
-    private static String findExistingMessageId(TextChannel channel, String marker) {
-        try {
-            List<Message> history = channel.getHistory().retrievePast(100).complete();
-            if (history == null) return null;
-            for (Message msg : history) {
-                User author = msg.getAuthor();
-                if (author == null || !author.isBot()) continue;
-                String content = msg.getContentRaw();
-                if (content != null && content.endsWith(marker) && !content.endsWith(marker + "\u200b")) {
-                    return msg.getId();
-                }
-            }
-        } catch (Throwable t) {
-            System.err.println("[GuildAudit] Error searching message history: " + t.getMessage());
-        }
-        return null;
     }
 
     private static MessageEmbed buildAuditEmbed(net.dv8tion.jda.api.JDA jda) {
@@ -201,7 +180,7 @@ public final class GuildDiscordAuditPublisher {
             .setTitle("Guild Sync Audit")
             .setDescription(auditDescStr)
             .setColor(Color.decode("#2b2d31"))
-            .setFooter("Last updated: " + new java.util.Date())
+            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date())
             .build();
     }
 

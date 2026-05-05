@@ -3,6 +3,10 @@ package wowchat.discord;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import scala.Option;
+import wowchat.common.Global$;
+import wowchat.game.GameCommandHandler;
+import wowchat.game.GamePacketHandler;
 import wowchat.game.GuildMember;
 
 import java.awt.Color;
@@ -17,8 +21,6 @@ import java.util.*;
  */
 public final class GuildStatsPublisher {
 
-    private static final String STATS_MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
-    
     private static volatile String messageId = null;
 
     private GuildStatsPublisher() {}
@@ -32,14 +34,13 @@ public final class GuildStatsPublisher {
 
             // Try to find existing message on first run
             if (messageId == null) {
-                messageId = findExistingMessageId(channel, STATS_MARKER);
+                messageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Stats");
             }
 
             // Post new or edit existing
             if (messageId == null) {
                 try {
                     net.dv8tion.jda.api.entities.Message sent = channel.sendMessageEmbeds(embed)
-                        .setContent(STATS_MARKER)
                         .complete();
                     messageId = sent.getId();
                 } catch (Throwable t) {
@@ -47,7 +48,7 @@ public final class GuildStatsPublisher {
                 }
             } else {
                 try {
-                    channel.editMessageById(messageId, STATS_MARKER)
+                    channel.editMessageById(messageId, " ")
                         .setEmbeds(embed)
                         .complete();
                 } catch (Throwable t) {
@@ -77,24 +78,6 @@ public final class GuildStatsPublisher {
         } catch (Throwable t) {
             return false;
         }
-    }
-
-    private static String findExistingMessageId(TextChannel channel, String marker) {
-        try {
-            List<net.dv8tion.jda.api.entities.Message> history = channel.getHistory().retrievePast(100).complete();
-            if (history == null) return null;
-            for (net.dv8tion.jda.api.entities.Message msg : history) {
-                net.dv8tion.jda.api.entities.User author = msg.getAuthor();
-                if (author == null || !author.isBot()) continue;
-                String content = msg.getContentRaw();
-                if (content != null && content.endsWith(marker) && !content.endsWith(marker + "\u200b")) {
-                    return msg.getId();
-                }
-            }
-        } catch (Throwable t) {
-            System.err.println("[GuildStats] Error searching message history: " + t.getMessage());
-        }
-        return null;
     }
 
     private static MessageEmbed buildStatsEmbed() {
@@ -181,7 +164,7 @@ public final class GuildStatsPublisher {
         EmbedBuilder eb = new EmbedBuilder();
         eb.setTitle("Guild Statistics");
         eb.setColor(Color.decode("#2b2d31"));
-        eb.setFooter("Last updated: " + new java.util.Date());
+        eb.setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date());
 
         eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);
         

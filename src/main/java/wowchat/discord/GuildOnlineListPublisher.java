@@ -80,13 +80,6 @@ public final class GuildOnlineListPublisher {
         return race != null ? race + " " : "";
     }
 
-    /**
-     * Invisible Unicode marker appended to our message so we can identify it
-     * in channel history without affecting visible content.
-     * 10 zero-width spaces - same as original.
-     */
-    private static final String MARKER = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200b";
-
     /** Health file path - Watchdog reads this to know WoW packets are still flowing. */
     private static final String WOW_HEALTH_FILE = "wow.health";
 
@@ -94,13 +87,13 @@ public final class GuildOnlineListPublisher {
     private static final int HEALTH_WRITE_INTERVAL_SEC = 30;
 
     // Config values - loaded once at init()
-    private static volatile long    channelId     = 0L;
-    private static volatile int     updateMinutes = 5;
-    private static volatile Set<String> ignoreLower = Collections.emptySet();
+    private static volatile List<Long> channelIds   = Collections.emptyList();
+    private static volatile int        updateMinutes = 5;
+    private static volatile Set<String> ignoreLower  = Collections.emptySet();
 
     // Runtime state
-    private static volatile boolean started     = false;
-    private static volatile String  messageId   = null;
+    private static volatile boolean started = false;
+    private static final Map<Long, String> messageIds = new ConcurrentHashMap<>(); // channelId -> messageId
 
     // Cached JDA reference - extracted once via reflection, reused forever after
     // NOTE: If this is null after the first successful extraction it means something
@@ -111,7 +104,7 @@ public final class GuildOnlineListPublisher {
 
     private GuildOnlineListPublisher() {}
 
-    public static boolean isEnabled() { return channelId > 0L; }
+    public static boolean isEnabled() { return !channelIds.isEmpty(); }
 
     // -------------------------------------------------------------------------
     // Init - called once from WoWChat.main()
@@ -128,8 +121,8 @@ public final class GuildOnlineListPublisher {
         loadConfig();
 
         // Only log and schedule if feature is actually enabled
-        if (channelId > 0L) {
-            System.out.println("[GuildOnlineList] Initializing. Channel ID: " + channelId
+        if (!channelIds.isEmpty()) {
+            System.out.println("[GuildOnlineList] Initializing. Channel IDs: " + channelIds
                 + ", update interval: " + updateMinutes + " min.");
         }
 
@@ -139,8 +132,8 @@ public final class GuildOnlineListPublisher {
         long initialDelaySec = 15L;
         long periodSec       = Math.max(1, updateMinutes) * 60L;
 
-        // Only schedule online list updates if a channel is configured
-        if (channelId > 0L) {
+        // Only schedule online list updates if channels are configured
+        if (!channelIds.isEmpty()) {
             scheduler.scheduleAtFixedRate(() -> {
                 try {
                     tick();
@@ -213,6 +206,14 @@ public final class GuildOnlineListPublisher {
     // Main update tick
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // Guild/Realm Identifier - Used in footer to identify embeds
+    // -------------------------------------------------------------------------
+    
+    // -------------------------------------------------------------------------
+    // Main tick loop - updates online list
+    // -------------------------------------------------------------------------
+
     private static void tick() {
         JDA jda = getJda();
         if (jda == null) {
@@ -220,14 +221,7 @@ public final class GuildOnlineListPublisher {
             return;
         }
 
-        TextChannel channel = jda.getTextChannelById(channelId);
-        if (channel == null) {
-            System.err.println("[GuildOnlineList] Could not find text channel with ID " + channelId
-                + ". Check your guildOnlineListChannelId config value.");
-            return;
-        }
-
-        // Build the sorted list of online member names
+        // Build the sorted list of online member names (once, used for all channels)
         List<String> onlineNames = getOnlineNames();
         Collections.sort(onlineNames, String.CASE_INSENSITIVE_ORDER);
 
@@ -249,31 +243,44 @@ public final class GuildOnlineListPublisher {
             .setTitle(title)
             .setDescription(listContent)
             .setColor(Color.decode("#2b2d31"))
-            .setFooter("Last updated: " + new java.util.Date())
+            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date())
             .build();
 
-        // Find our existing message if we don't have its ID cached
-        if (messageId == null) {
-            messageId = findExistingMessageId(channel);
-        }
-
-        if (messageId == null) {
-            try {
-                Message sent = channel.sendMessageEmbeds(embed)
-                    .setContent(MARKER)
-                    .complete();
-                messageId = sent.getId();
-            } catch (Throwable t) {
-                System.err.println("[GuildOnlineList] Failed to send message: " + t.getMessage());
+        // Post/update to all configured channels
+        for (Long channelId : channelIds) {
+            TextChannel channel = jda.getTextChannelById(channelId);
+            if (channel == null) {
+                System.err.println("[GuildOnlineList] Could not find text channel with ID " + channelId);
+                continue;
             }
-        } else {
-            try {
-                channel.editMessageById(messageId, MARKER)
-                    .setEmbeds(embed)
-                    .complete();
-            } catch (Throwable t) {
-                System.err.println("[GuildOnlineList] Failed to edit message (will retry): " + t.getMessage());
-                messageId = null;
+
+            // Find our existing message if we don't have its ID cached
+            String messageId = messageIds.get(channelId);
+            if (messageId == null) {
+                messageId = GuildEmbedUtil.findEmbedByTitlePrefixAndFooter(channel, "Who's Online?");
+                if (messageId != null) {
+                    messageIds.put(channelId, messageId);
+                }
+            }
+
+            // Post new or edit existing
+            if (messageId == null) {
+                try {
+                    Message sent = channel.sendMessageEmbeds(embed)
+                        .complete();
+                    messageIds.put(channelId, sent.getId());
+                } catch (Throwable t) {
+                    System.err.println("[GuildOnlineList] Failed to send message to channel " + channelId + ": " + t.getMessage());
+                }
+            } else {
+                try {
+                    channel.editMessageById(messageId, " ")
+                        .setEmbeds(embed)
+                        .complete();
+                } catch (Throwable t) {
+                    System.err.println("[GuildOnlineList] Failed to edit message in channel " + channelId + " (will retry): " + t.getMessage());
+                    messageIds.remove(channelId);
+                }
             }
         }
     }
@@ -366,30 +373,6 @@ public final class GuildOnlineListPublisher {
     }
 
     // -------------------------------------------------------------------------
-    // Find our previously posted message in channel history
-    // -------------------------------------------------------------------------
-
-    private static String findExistingMessageId(TextChannel channel) {
-        try {
-            List<Message> history = channel.getHistory().retrievePast(100).complete();
-            if (history == null) return null;
-
-            for (Message msg : history) {
-                User author = msg.getAuthor();
-                if (author == null || !author.isBot()) continue;
-
-                String content = msg.getContentRaw();
-                if (content != null && content.endsWith(MARKER)) {
-                    return msg.getId();
-                }
-            }
-        } catch (Throwable t) {
-            System.err.println("[GuildOnlineList] Error searching message history: " + t.getMessage());
-        }
-        return null;
-    }
-
-    // -------------------------------------------------------------------------
     // JDA extraction via reflection - cached after first success
     //
     // WHY REFLECTION: Discord.java has a private `jda` field and no public
@@ -448,30 +431,37 @@ public final class GuildOnlineListPublisher {
             
             if (!enabled) {
                 System.out.println("[GuildOnlineList] Feature disabled in config");
-                channelId = 0L;
+                channelIds = Collections.emptyList();
                 updateMinutes = 5;
                 ignoreLower = Collections.emptySet();
             } else {
-                // Channel ID - try NEW path first, fall back to OLD for backward compatibility
-                channelId = 0L;
+                // Channel IDs - try LIST first, then fall back to single ID for backward compatibility
+                List<Long> ids = new ArrayList<>();
                 try {
-                    if (config.hasPath("guildOnlineList.channelId")) {
-                        channelId = config.getLong("guildOnlineList.channelId");
+                    // Try new list format: channelIds = [123, 456]
+                    if (config.hasPath("guildOnlineList.channelIds")) {
+                        List<? extends Number> configIds = config.getNumberList("guildOnlineList.channelIds");
+                        for (Number n : configIds) {
+                            ids.add(n.longValue());
+                        }
+                    } 
+                    // Fall back to old single ID formats
+                    else if (config.hasPath("guildOnlineList.channelId")) {
+                        ids.add(config.getLong("guildOnlineList.channelId"));
                     } else if (config.hasPath("guildOnlineListChannelId")) {
-                        channelId = config.getLong("guildOnlineListChannelId");
+                        ids.add(config.getLong("guildOnlineListChannelId"));
                     }
                 } catch (ConfigException.WrongType e) {
                     try {
+                        // Handle string IDs
                         String idStr = config.hasPath("guildOnlineList.channelId")
                             ? config.getString("guildOnlineList.channelId")
                             : config.getString("guildOnlineListChannelId");
-                        channelId = Long.parseLong(idStr.trim());
-                    } catch (Throwable ignored) {
-                        channelId = 0L;
-                    }
-                } catch (ConfigException.Missing e) {
-                    channelId = 0L;
-                }
+                        ids.add(Long.parseLong(idStr.trim()));
+                    } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {}
+                
+                channelIds = Collections.unmodifiableList(ids);
 
                 // Update interval - new key with fallback to old key for backward compatibility
                 try {
@@ -512,7 +502,7 @@ public final class GuildOnlineListPublisher {
         } catch (Throwable t) {
             System.err.println("[GuildOnlineList] Failed to load config: " + t.getMessage()
                 + ". Guild online list will be disabled.");
-            channelId     = 0L;
+            channelIds    = Collections.emptyList();
             updateMinutes = 5;
             ignoreLower   = Collections.emptySet();
         }
