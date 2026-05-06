@@ -65,14 +65,12 @@ public class GuildInactivityManager {
         Map<String, List<Object>> userCharacters = new HashMap<>();
         for (Object member : guildMembers.values()) {
             try {
-                // Access Scala case class fields via reflection
-                String officerNote = (String) member.getClass().getMethod("officerNote").invoke(member);
-                String discordId = extractDiscordId(officerNote);
+                String discordId = DiscordIdExtractor.extractDiscordId(member);
                 if (discordId != null && !discordId.isEmpty()) {
                     userCharacters.computeIfAbsent(discordId, k -> new ArrayList<>()).add(member);
                 }
             } catch (Exception e) {
-                // Skip this member if reflection fails
+                // Skip this member if extraction fails
             }
         }
 
@@ -208,18 +206,6 @@ public class GuildInactivityManager {
     /**
      * Extract Discord ID from officer note (18-19 digit snowflake)
      */
-    private static String extractDiscordId(String officerNote) {
-        if (officerNote == null || officerNote.trim().isEmpty()) {
-            return null;
-        }
-        String trimmed = officerNote.trim();
-        // Discord IDs are 17-19 digits
-        if (trimmed.matches("\\d{17,19}")) {
-            return trimmed;
-        }
-        return null;
-    }
-
     private static boolean isInactivityEnabled() {
         try {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");

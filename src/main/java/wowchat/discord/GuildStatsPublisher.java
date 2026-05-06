@@ -34,7 +34,7 @@ public final class GuildStatsPublisher {
 
             // Try to find existing message on first run
             if (messageId == null) {
-                messageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Stats");
+                messageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Statistics");
             }
 
             // Post new or edit existing

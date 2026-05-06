@@ -132,17 +132,14 @@ public final class GuildRoleSync {
         while (it.hasNext()) {
             GuildMember member = it.next();
 
-            String officerNote = member.officerNote().trim();
-            if (officerNote.isEmpty()) continue;
-
-            // Officer note should be a numeric Discord user ID
-            if (!officerNote.matches("\\d{17,20}")) continue;
+            String discordId = DiscordIdExtractor.extractDiscordId(member);
+            if (discordId == null) continue;
 
             String rankName = rankNames.getOrDefault(member.rankIndex(), "").toLowerCase(Locale.ROOT);
             if (rankName.isEmpty()) continue;
 
             discordIdToRanks
-                .computeIfAbsent(officerNote, k -> new HashSet<>())
+                .computeIfAbsent(discordId, k -> new HashSet<>())
                 .add(rankName);
         }
 
@@ -201,6 +198,42 @@ public final class GuildRoleSync {
 
             } catch (Throwable t) {
                 System.err.println("[GuildRoleSync] Error syncing roles for Discord ID " + discordId + ": " + t.getMessage());
+            }
+        }
+
+        // Clean up: Remove guild roles from Discord members who are NOT in discordIdToRanks
+        // This handles: users who left guild, users whose Discord ID was removed, or config change to public notes
+        List<Member> allMembers = discordGuild.getMembers();
+        for (Member discordMember : allMembers) {
+            String discordId = discordMember.getId();
+            
+            // Skip users who are in WoW guild (already processed above)
+            if (discordIdToRanks.containsKey(discordId)) continue;
+            
+            // Check if this user has any guild roles that should be removed
+            List<Role> currentRoles = discordMember.getRoles();
+            Set<String> rolesToRemove = new HashSet<>();
+            
+            for (Role role : currentRoles) {
+                if (roleIdToRanks.containsKey(role.getId())) {
+                    rolesToRemove.add(role.getId());
+                }
+            }
+            
+            if (!rolesToRemove.isEmpty()) {
+                processed++;
+                try {
+                    for (String roleIdToRemove : rolesToRemove) {
+                        Role role = discordGuild.getRoleById(roleIdToRemove);
+                        if (role != null) {
+                            discordGuild.removeRoleFromMember(discordMember, role).complete();
+                            removed++;
+                            System.out.println("[GuildRoleSync] Removed role '" + role.getName() + "' from " + discordMember.getEffectiveName() + " (not in WoW guild)");
+                        }
+                    }
+                } catch (Throwable t) {
+                    System.err.println("[GuildRoleSync] Error removing roles from Discord ID " + discordId + ": " + t.getMessage());
+                }
             }
         }
 

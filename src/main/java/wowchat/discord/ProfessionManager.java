@@ -268,8 +268,9 @@ public final class ProfessionManager {
             scala.collection.Iterator<wowchat.game.GuildMember> it = roster.valuesIterator();
             while (it.hasNext()) {
                 wowchat.game.GuildMember member = it.next();
+                String memberDiscordId = DiscordIdExtractor.extractDiscordId(member);
                 if (member.name().equalsIgnoreCase(charName)
-                        && member.officerNote().trim().equals(callerDiscordId)) {
+                        && callerDiscordId.equals(memberDiscordId)) {
                     return true;
                 }
             }

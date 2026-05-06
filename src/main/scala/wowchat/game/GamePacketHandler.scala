@@ -16,7 +16,7 @@ import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 case class Player(name: String, charClass: Byte)
-case class GuildMember(name: String, isOnline: Boolean, charClass: Byte, level: Byte, zoneId: Int, lastLogoff: Float, rankIndex: Int = 0, officerNote: String = "")
+case class GuildMember(name: String, isOnline: Boolean, charClass: Byte, level: Byte, zoneId: Int, lastLogoff: Float, rankIndex: Int = 0, publicNote: String = "", officerNote: String = "")
 case class ChatMessage(guid: Long, tp: Byte, message: String, channel: Option[String] = None)
 case class NameQueryMessage(guid: Long, name: String, charClass: Byte, race: String = "")
 case class AuthChallengeMessage(sessionKey: Array[Byte], byteBuf: ByteBuf)
@@ -674,10 +674,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       } else {
         0
       }
-      msg.skipString // public note
+      val publicNote = msg.readString // public note
       val officerNote = msg.readString
 
-      guid -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, rankIndex, officerNote)
+      guid -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, rankIndex, publicNote, officerNote)
     }).toMap
   }
 

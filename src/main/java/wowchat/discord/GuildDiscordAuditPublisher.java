@@ -93,16 +93,16 @@ public final class GuildDiscordAuditPublisher {
     }
 
     private static MessageEmbed buildAuditEmbed(net.dv8tion.jda.api.JDA jda) {
-        Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes();
+        Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(false);
         
         List<Guild> guilds = jda.getGuilds();
         if (guilds.isEmpty()) return buildEmptyEmbed();
         Guild discordGuild = guilds.get(0);
 
-        // Build set of all linked Discord IDs
+        // Build set of all linked Discord IDs using DiscordIdExtractor
         Set<String> linkedDiscordIds = new HashSet<>();
-        for (String note : rosterNotes.values()) {
-            String id = extractDiscordId(note);
+        for (GuildMember member : members) {
+            String id = DiscordIdExtractor.extractDiscordId(member);
             if (id != null) linkedDiscordIds.add(id);
         }
 
@@ -136,11 +136,11 @@ public final class GuildDiscordAuditPublisher {
         }
         
         // --- Linked Wrong Rank Panel ---
-        StringBuilder linkedWrongRankPanel = buildLinkedWrongRankPanel(rosterNotes, discordGuild);
+        StringBuilder linkedWrongRankPanel = buildLinkedWrongRankPanel(members, discordGuild);
         String rankToCheck = getLinkedRankToCheck();
         
         // --- Rank Mismatch Panel ---
-        StringBuilder rankMismatchPanel = buildRankMismatchPanel(rosterNotes, discordGuild);
+        StringBuilder rankMismatchPanel = buildRankMismatchPanel(members, discordGuild);
 
         // --- Build embed description ---
         StringBuilder auditDesc = new StringBuilder();
@@ -196,7 +196,7 @@ public final class GuildDiscordAuditPublisher {
     // Rank Mismatch
     // -------------------------------------------------------------------------
     
-    private static StringBuilder buildLinkedWrongRankPanel(Map<String, String> rosterNotes, Guild discordGuild) {
+    private static StringBuilder buildLinkedWrongRankPanel(Collection<GuildMember> members, Guild discordGuild) {
         StringBuilder panel = new StringBuilder();
         
         String rankToCheck = getLinkedRankToCheck();
@@ -220,20 +220,16 @@ public final class GuildDiscordAuditPublisher {
             // Find characters at this rank who have Discord IDs
             List<CharWithOwner> flaggedChars = new ArrayList<>();
             
-            for (Map.Entry<String, String> entry : rosterNotes.entrySet()) {
-                String charName = entry.getKey();
-                String discordId = extractDiscordId(entry.getValue());
+            for (GuildMember member : members) {
+                String discordId = DiscordIdExtractor.extractDiscordId(member);
                 
                 if (discordId == null) continue; // No Discord ID
                 
-                GuildMember m = GuildDataCache.getInstance().getMember(charName);
-                if (m == null) continue;
-                
                 // Check if character has the target rank
-                if (m.rankIndex() == targetRankIndex) {
+                if (member.rankIndex() == targetRankIndex) {
                     Member discordMember = discordGuild.getMemberById(discordId);
                     String displayName = discordMember != null ? discordMember.getEffectiveName() : discordId;
-                    flaggedChars.add(new CharWithOwner(charName, discordId, displayName));
+                    flaggedChars.add(new CharWithOwner(member.name(), discordId, displayName));
                 }
             }
             
@@ -264,7 +260,7 @@ public final class GuildDiscordAuditPublisher {
         }
     }
     
-    private static StringBuilder buildRankMismatchPanel(Map<String, String> rosterNotes, Guild discordGuild) {
+    private static StringBuilder buildRankMismatchPanel(Collection<GuildMember> members, Guild discordGuild) {
         StringBuilder panel = new StringBuilder();
         
         try {
@@ -273,21 +269,17 @@ public final class GuildDiscordAuditPublisher {
             // Group characters by Discord ID
             Map<String, List<CharRankInfo>> charsByDiscordId = new LinkedHashMap<>();
             
-            for (Map.Entry<String, String> entry : rosterNotes.entrySet()) {
-                String charName = entry.getKey();
-                String discordId = extractDiscordId(entry.getValue());
+            for (GuildMember member : members) {
+                String discordId = DiscordIdExtractor.extractDiscordId(member);
                 
                 if (discordId == null) continue;
                 
-                GuildMember m = GuildDataCache.getInstance().getMember(charName);
-                if (m != null) {
-                    int rankIndex = m.rankIndex();
-                    String rankName = guildRanks.getOrDefault(rankIndex, "Rank " + rankIndex);
-                    
-                    charsByDiscordId
-                        .computeIfAbsent(discordId, k -> new ArrayList<>())
-                        .add(new CharRankInfo(charName, rankIndex, rankName));
-                }
+                int rankIndex = member.rankIndex();
+                String rankName = guildRanks.getOrDefault(rankIndex, "Rank " + rankIndex);
+                
+                charsByDiscordId
+                    .computeIfAbsent(discordId, k -> new ArrayList<>())
+                    .add(new CharRankInfo(member.name(), rankIndex, rankName));
             }
             
             // Find Discord users with rank mismatches
@@ -454,13 +446,6 @@ public final class GuildDiscordAuditPublisher {
     // Helpers
     // -------------------------------------------------------------------------
     
-    private static String extractDiscordId(String note) {
-        if (note == null || note.isEmpty()) return null;
-        String trimmed = note.trim();
-        if (trimmed.matches("\\d{17,19}")) return trimmed;
-        return null;
-    }
-    
     public static List<String> getAuditRoleIds() {
         try {
             String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
@@ -484,11 +469,18 @@ public final class GuildDiscordAuditPublisher {
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
             
             // Try NEW path first, fall back to OLD
+            String rankToCheck = null;
             if (config.hasPath("guildRoster.audit.linkedRankToCheck")) {
-                return config.getString("guildRoster.audit.linkedRankToCheck");
+                rankToCheck = config.getString("guildRoster.audit.linkedRankToCheck");
             } else if (config.hasPath("guildAuditLinkedRankToCheck")) {
-                return config.getString("guildAuditLinkedRankToCheck");
+                rankToCheck = config.getString("guildAuditLinkedRankToCheck");
             }
+            
+            // Return null if empty or blank (disables the feature)
+            if (rankToCheck != null && rankToCheck.trim().isEmpty()) {
+                return null;
+            }
+            return rankToCheck;
         } catch (Throwable t) {}
         return null;
     }

@@ -129,9 +129,9 @@ public final class SlashCommandHandler {
                         while (it.hasNext()) {
                             wowchat.game.GuildMember m = it.next();
                             if (m.name().equalsIgnoreCase(charName)) {
-                                String note = m.officerNote().trim();
-                                if (note.matches("\\d{17,20}")) {
-                                    discordMention = " (<@" + note + ">)";
+                                String discordId = DiscordIdExtractor.extractDiscordId(m);
+                                if (discordId != null) {
+                                    discordMention = " (<@" + discordId + ">)";
                                 }
                                 break;
                             }

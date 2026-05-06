@@ -247,7 +247,7 @@ class GamePacketHandlerCataclysm15595(realmId: Int, realmName: String, sessionKe
       msg.byteBuf.skipBytes(8) // total activity (0)
       msg.readXorByteSeq(guids(i), 7)
       msg.byteBuf.skipBytes(4) // guild rep?
-      msg.byteBuf.skipBytes(pNoteLengths(i)) // public note
+      val publicNote = msg.byteBuf.readCharSequence(pNoteLengths(i), Charset.forName("UTF-8")).toString
       msg.readXorByteSeq(guids(i), 3)
       val level = msg.byteBuf.readByte
       msg.byteBuf.skipBytes(4) // unkn
@@ -255,12 +255,12 @@ class GamePacketHandlerCataclysm15595(realmId: Int, realmName: String, sessionKe
       msg.byteBuf.skipBytes(1) // unkn
       msg.readXorByteSeq(guids(i), 1)
       val lastLogoff = msg.byteBuf.readFloatLE
-      msg.byteBuf.skipBytes(oNoteLengths(i)) // officer note
+      val officerNote = msg.byteBuf.readCharSequence(oNoteLengths(i), Charset.forName("UTF-8")).toString
       msg.readXorByteSeq(guids(i), 6)
       val name = msg.byteBuf.readCharSequence(nameLengths(i), Charset.forName("UTF-8")).toString
       val isOnline = (flags & 0x01) == 0x01
 
-      ByteUtils.bytesToLongLE(guids(i)) -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff)
+      ByteUtils.bytesToLongLE(guids(i)) -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, publicNote = publicNote, officerNote = officerNote)
     }).toMap
 
     msg.byteBuf.skipBytes(gInfoLength)

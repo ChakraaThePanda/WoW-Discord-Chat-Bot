@@ -75,6 +75,15 @@ object WoWChat extends StrictLogging {
     logger.info("Connecting to Discord...")
     Global.discord = new Discord(new CommonConnectionCallback {
       override def connected: Unit = {
+        // Initialize Discord ID extractor with config
+        try {
+          val configFile = System.getProperty("wowchat.configFile", "wowchat.conf")
+          val config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile)).resolve()
+          wowchat.discord.DiscordIdExtractor.initialize(config)
+        } catch {
+          case e: Throwable => logger.error("Failed to initialize DiscordIdExtractor", e)
+        }
+        
         wowchat.discord.GuildOnlineListPublisher.init()
         wowchat.discord.GuildStatusRotation.init()
         wowchat.discord.GuildRoleSync.init()

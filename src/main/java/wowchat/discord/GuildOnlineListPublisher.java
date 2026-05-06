@@ -355,9 +355,9 @@ public final class GuildOnlineListPublisher {
                 while (it.hasNext()) {
                     GuildMember m = it.next();
                     if (m.name().equalsIgnoreCase(charName.trim())) {
-                        String note = m.officerNote() != null ? m.officerNote().trim() : "";
-                        if (note.matches("\\d{17,19}")) {
-                            return entry + " (<@" + note + ">)";
+                        String discordId = DiscordIdExtractor.extractDiscordId(m);
+                        if (discordId != null) {
+                            return entry + " (<@" + discordId + ">)";
                         }
                         break;
                     }
@@ -465,8 +465,8 @@ public final class GuildOnlineListPublisher {
 
                 // Update interval - new key with fallback to old key for backward compatibility
                 try {
-                    if (config.hasPath("discordFeaturesUpdateMinutes")) {
-                        updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
+                    if (config.hasPath("discord.featuresUpdateMinutes")) {
+                        updateMinutes = config.getInt("discord.featuresUpdateMinutes");
                     } else {
                         updateMinutes = config.getInt("guildOnlineListUpdateMinutes");
                     }

@@ -107,7 +107,7 @@ public final class GuildRosterPublisher {
             return;
         }
 
-        Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes();
+        Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes(true);
         if (rosterNotes == null) return;
 
         // --- Build and post audit embed ---
@@ -200,8 +200,11 @@ public final class GuildRosterPublisher {
 
         for (String charName : sortedChars) {
             if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
-            String note = rosterNotes.get(charName);
-            String discordId = extractDiscordId(note);
+            
+            // Use DiscordIdExtractor to respect configured note location
+            GuildMember member = GuildDataCache.getInstance().getMember(charName);
+            String discordId = DiscordIdExtractor.extractDiscordId(member);
+            
             if (discordId != null && discordGuild.getMemberById(discordId) != null) {
                 byDiscordId.computeIfAbsent(discordId, k -> new ArrayList<>()).add(charName);
             } else {
@@ -232,14 +235,16 @@ public final class GuildRosterPublisher {
             blocks.add(block.toString());
         }
 
-        // Unlinked section as one block
+        // Unlinked section - add each character as a separate block so paging can split them
         if (!unlinked.isEmpty()) {
-            StringBuilder block = new StringBuilder();
-            block.append("**Unlinked Characters (" + unlinked.size() + ")**\n");
+            // Add header as first unlinked block
+            blocks.add("**Unlinked Characters (" + unlinked.size() + ")**\n");
+            
+            // Add each unlinked character as its own block (can be split across pages)
             for (String charName : unlinked) {
-                block.append("- ").append(finalRoster != null ? formatCharEntry(charName, finalRoster) : charName).append("\n");
+                String entry = "- " + (finalRoster != null ? formatCharEntry(charName, finalRoster) : charName) + "\n";
+                blocks.add(entry);
             }
-            blocks.add(block.toString());
         }
 
         // Pack blocks into pages - never split a user block across pages
@@ -294,11 +299,8 @@ public final class GuildRosterPublisher {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
             String description_prefix = i == 0 ? uniquePlayersCount + " Linked Players\n\n" : "";
             
-            // Footer format: "GuildName (RealmName) • Page X/Y • Last updated: ..."
-            String footerText = null;
-            if (i == pages.size() - 1) {
-                footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date();
-            }
+            // Footer: all pages get the footer for identification
+            String footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date();
             
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)
@@ -415,8 +417,8 @@ public final class GuildRosterPublisher {
 
             updateMinutes = 5;
             try {
-                if (config.hasPath("discordFeaturesUpdateMinutes")) {
-                    updateMinutes = config.getInt("discordFeaturesUpdateMinutes");
+                if (config.hasPath("discord.featuresUpdateMinutes")) {
+                    updateMinutes = config.getInt("discord.featuresUpdateMinutes");
                 }
                 if (updateMinutes < 1) updateMinutes = 1;
             } catch (ConfigException ignored) {}

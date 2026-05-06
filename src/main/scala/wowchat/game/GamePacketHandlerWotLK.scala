@@ -211,9 +211,9 @@ class GamePacketHandlerWotLK(realmId: Int, realmName: String, sessionKey: Array[
       msg.byteBuf.skipBytes(1) // tbc unkn
       val zoneId = msg.byteBuf.readIntLE
       val lastLogoff = if (!isOnline) msg.byteBuf.readFloatLE else 0f
-      msg.skipString                         // public note
+      val publicNote = msg.readString        // public note
       val officerNote = msg.readString       // officer note
-      guid -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, rankIndex, officerNote)
+      guid -> GuildMember(name, isOnline, charClass, level, zoneId, lastLogoff, rankIndex, publicNote, officerNote)
     }).toMap
   }
 }
