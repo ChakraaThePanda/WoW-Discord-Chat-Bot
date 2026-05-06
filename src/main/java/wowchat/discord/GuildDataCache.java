@@ -141,18 +141,6 @@ public final class GuildDataCache {
     }
     
     /**
-     * Get officer notes map (name -> note)
-     */
-    public Map<String, String> getOfficerNotes() {
-        lock.readLock().lock();
-        try {
-            return new LinkedHashMap<>(officerNotes);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-    
-    /**
      * Get officer notes filtered by ignore list
      */
     public Map<String, String> getOfficerNotes(boolean applyIgnoreFilter) {
@@ -175,40 +163,6 @@ public final class GuildDataCache {
     }
     
     /**
-     * Get the ignore list
-     */
-    public Set<String> getIgnoreList() {
-        lock.readLock().lock();
-        try {
-            return ignoreLower;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-    
-    /**
-     * Get member count (with optional ignore filter)
-     */
-    public int getMemberCount(boolean applyIgnoreFilter) {
-        lock.readLock().lock();
-        try {
-            if (!applyIgnoreFilter || ignoreLower.isEmpty()) {
-                return memberByName.size();
-            }
-            
-            int count = 0;
-            for (String name : memberByName.keySet()) {
-                if (!ignoreLower.contains(name.toLowerCase(Locale.ROOT))) {
-                    count++;
-                }
-            }
-            return count;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-    
-    /**
      * Check if cache is empty
      */
     public boolean isEmpty() {
@@ -218,13 +172,6 @@ public final class GuildDataCache {
         } finally {
             lock.readLock().unlock();
         }
-    }
-    
-    /**
-     * Get last update timestamp
-     */
-    public long getLastUpdateTime() {
-        return lastUpdateTime;
     }
     
     // -------------------------------------------------------------------------

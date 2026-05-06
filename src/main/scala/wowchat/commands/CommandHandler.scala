@@ -75,15 +75,14 @@ object CommandHandler extends StrictLogging {
     // Helper to get Discord owner info
     def getDiscordOwner(charName: String): String = {
       discordGuild.flatMap { guild =>
-        val notes = wowchat.discord.GuildDataCache.getInstance().getOfficerNotes()
-        if (notes == null) None
+        val member = wowchat.discord.GuildDataCache.getInstance().getMember(charName)
+        if (member == null) None
         else {
-          Option(notes.get(charName)).flatMap { note =>
-            val discordIdPattern = "(\\d{17,19})".r
-            discordIdPattern.findFirstIn(note).flatMap { discordId =>
-              Option(guild.getMemberById(discordId)).map { member =>
-                s" (Owned by <@$discordId>)"
-              }
+          val discordId = wowchat.discord.DiscordIdExtractor.extractDiscordId(member)
+          if (discordId == null) None
+          else {
+            Option(guild.getMemberById(discordId)).map { member =>
+              s" (Owned by <@$discordId>)"
             }
           }
         }

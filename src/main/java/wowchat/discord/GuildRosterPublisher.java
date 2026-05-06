@@ -110,6 +110,25 @@ public final class GuildRosterPublisher {
         Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes(true);
         if (rosterNotes == null) return;
 
+        // --- Get Discord guild for inactivity processing ---
+        List<Guild> guilds = jda.getGuilds();
+        if (guilds.isEmpty()) return;
+        Guild discordGuild = guilds.get(0);
+        
+        // --- Get raw roster for inactivity checking ---
+        scala.collection.mutable.Map<Object, wowchat.game.GuildMember> rawRoster = GuildDataCache.getInstance().getRawRoster();
+        Map<Long, Object> guildMembers = new HashMap<>();
+        if (rawRoster != null) {
+            scala.collection.Iterator<scala.Tuple2<Object, wowchat.game.GuildMember>> it = rawRoster.iterator();
+            while (it.hasNext()) {
+                scala.Tuple2<Object, wowchat.game.GuildMember> entry = it.next();
+                guildMembers.put((Long) entry._1(), entry._2());
+            }
+        }
+        
+        // --- Process inactivity (assigns/removes Discord roles) ---
+        int inactiveCount = GuildInactivityManager.processInactivity(discordGuild, guildMembers);
+
         // --- Build and post audit embed ---
         GuildDiscordAuditPublisher.publish(channel);
         
@@ -124,11 +143,7 @@ public final class GuildRosterPublisher {
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
         // --- Build roster embed ---
-        List<Guild> guilds = jda.getGuilds();
-        if (guilds.isEmpty()) return;
-        Guild discordGuild = guilds.get(0);
-        
-        postOrEditRoster(channel, discordGuild, rosterNotes);
+        postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
     }
 
     // -------------------------------------------------------------------------
@@ -176,7 +191,7 @@ public final class GuildRosterPublisher {
     // Guild Roster embed
     // -------------------------------------------------------------------------
 
-    private static void postOrEditRoster(TextChannel channel, Guild discordGuild, Map<String, String> rosterNotes) {
+    private static void postOrEditRoster(TextChannel channel, Guild discordGuild, Map<String, String> rosterNotes, int inactiveCount) {
         // Get full roster for attribute lookup
         scala.collection.Map<Object, GuildMember> finalRoster = null;
         try {
@@ -297,7 +312,17 @@ public final class GuildRosterPublisher {
         // New pages appear at bottom, edits stay in place
         for (int i = 0; i < pages.size(); i++) {
             String title = pages.size() > 1 ? "Guild Roster (" + totalMembers + ") (" + (i + 1) + "/" + pages.size() + ")" : "Guild Roster (" + totalMembers + ")";
-            String description_prefix = i == 0 ? uniquePlayersCount + " Linked Players\n\n" : "";
+            
+            // Build description prefix for first page
+            StringBuilder prefix = new StringBuilder();
+            if (i == 0) {
+                prefix.append(uniquePlayersCount).append(" Linked Players");
+                if (inactiveCount > 0) {
+                    prefix.append(" (").append(inactiveCount).append(" Inactive)");
+                }
+                prefix.append("\n\n");
+            }
+            String description_prefix = prefix.toString();
             
             // Footer: all pages get the footer for identification
             String footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date();
@@ -353,25 +378,6 @@ public final class GuildRosterPublisher {
                 clearId.set(null);
             }
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Get guild roster: charName -> raw officer note
-    // -------------------------------------------------------------------------
-
-    private static Map<String, String> getGuildRosterNotes() {
-        return GuildDataCache.getInstance().getOfficerNotes();
-    }
-
-    // -------------------------------------------------------------------------
-    // Extract a valid Discord snowflake ID (17-19 digits) from an officer note
-    // -------------------------------------------------------------------------
-
-    private static String extractDiscordId(String note) {
-        if (note == null || note.isEmpty()) return null;
-        String trimmed = note.trim();
-        if (trimmed.matches("\\d{17,19}")) return trimmed;
-        return null;
     }
 
     // -------------------------------------------------------------------------
