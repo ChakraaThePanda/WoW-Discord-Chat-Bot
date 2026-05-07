@@ -80,6 +80,24 @@ public final class GuildStatsPublisher {
         }
     }
 
+    private static boolean isBlockEnabled(String blockName) {
+        try {
+            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
+            com.typesafe.config.Config config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
+                .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true));
+            
+            String configPath = "guildRoster.stats." + blockName;
+            if (config.hasPath(configPath)) {
+                return config.getBoolean(configPath);
+            }
+            // Default to true if not specified
+            return true;
+        } catch (Throwable t) {
+            // If any error, default to showing the block
+            return true;
+        }
+    }
+
     private static MessageEmbed buildStatsEmbed() {
         Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(true);
         
@@ -166,15 +184,28 @@ public final class GuildStatsPublisher {
         eb.setColor(Color.decode("#2b2d31"));
         eb.setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date());
 
-        eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);
+        // Add fields based on configuration
+        if (isBlockEnabled("show_faction_distribution")) {
+            eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);
+        }
         
-        // Only show race distribution if we have race data
-        String raceDistribution = raceCounts.isEmpty() ? "Race data not yet available" : buildRaceGraph(raceCounts, totalMembers);
-        eb.addField("Race Distribution", raceDistribution, false);
+        if (isBlockEnabled("show_race_distribution")) {
+            // Only show race distribution if we have race data
+            String raceDistribution = raceCounts.isEmpty() ? "Race data not yet available" : buildRaceGraph(raceCounts, totalMembers);
+            eb.addField("Race Distribution", raceDistribution, false);
+        }
         
-        eb.addField("Class Distribution", buildClassGraph(classCounts, totalMembers), false);
-        eb.addField("Level Distribution", buildLevelGraph(levelCounts, totalMembers), false);
-        eb.addField("Professions", buildProfessionList(profCounts), false);
+        if (isBlockEnabled("show_class_distribution")) {
+            eb.addField("Class Distribution", buildClassGraph(classCounts, totalMembers), false);
+        }
+        
+        if (isBlockEnabled("show_level_distribution")) {
+            eb.addField("Level Distribution", buildLevelGraph(levelCounts, totalMembers), false);
+        }
+        
+        if (isBlockEnabled("show_professions")) {
+            eb.addField("Professions", buildProfessionList(profCounts), false);
+        }
 
         return eb.build();
     }
@@ -189,30 +220,30 @@ public final class GuildStatsPublisher {
         return "Unknown";
     }
 
-    private static String getClassName(byte charClass) {
-        switch (charClass) {
-            case 0x01: return "Warrior";
-            case 0x02: return "Paladin";
-            case 0x03: return "Hunter";
-            case 0x04: return "Rogue";
-            case 0x05: return "Priest";
-            case 0x06: return "Death Knight";
-            case 0x07: return "Shaman";
-            case 0x08: return "Mage";
-            case 0x09: return "Warlock";
-            case 0x0B: return "Druid";
-            default:   return "Unknown";
+    private static String getClassName(int classId) {
+        switch (classId) {
+            case 1: return "Warrior";
+            case 2: return "Paladin";
+            case 3: return "Hunter";
+            case 4: return "Rogue";
+            case 5: return "Priest";
+            case 6: return "Death Knight";
+            case 7: return "Shaman";
+            case 8: return "Mage";
+            case 9: return "Warlock";
+            case 11: return "Druid";
+            default: return "Unknown";
         }
     }
 
-    // Faction graph: Always show both factions in order (Alliance, Horde)
+    // Faction graph: Alliance then Horde with bars
     private static String buildFactionGraph(Map<String, Integer> counts, int total) {
         if (total == 0) return "No data";
         
         final int MAX_BAR_LENGTH = 20;
         
-        // Find max count to scale bars relative to it
-        int maxCount = Math.max(counts.getOrDefault("Alliance", 0), counts.getOrDefault("Horde", 0));
+        // Find max count
+        int maxCount = counts.values().stream().max(Integer::compareTo).orElse(0);
         if (maxCount == 0) return "No data";
         
         int maxDigits = String.valueOf(maxCount).length();
