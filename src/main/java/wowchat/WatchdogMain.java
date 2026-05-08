@@ -6,7 +6,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -36,6 +38,8 @@ public final class WatchdogMain {
     private static final int    DISCORD_STALE_SECONDS   = 600;  // 10 min
     private static final int    RESTART_DELAY_SECONDS   = 15;
     private static final int    CHECK_INTERVAL_MS       = 10000;
+
+    private static final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss.SSS");
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
@@ -122,9 +126,22 @@ public final class WatchdogMain {
     private static long readTimestamp(String path) {
         try {
             String raw = new String(Files.readAllBytes(Paths.get(path)), "UTF-8").trim();
+            
+            // Handle empty file
+            if (raw.isEmpty()) {
+                String timestamp = timestampFormat.format(new Date());
+                System.err.println("[Watchdog] " + timestamp + " - Could not read " + path + ": File is empty");
+                return System.currentTimeMillis();
+            }
+            
             return Long.parseLong(raw);
+        } catch (NumberFormatException nfe) {
+            String timestamp = timestampFormat.format(new Date());
+            System.err.println("[Watchdog] " + timestamp + " - Could not read " + path + ": Invalid number format: \"" + nfe.getMessage() + "\"");
+            return System.currentTimeMillis();
         } catch (Throwable t) {
-            System.err.println("[Watchdog] Could not read " + path + ": " + t.getMessage());
+            String timestamp = timestampFormat.format(new Date());
+            System.err.println("[Watchdog] " + timestamp + " - Could not read " + path + ": " + t.getMessage());
             return System.currentTimeMillis();
         }
     }

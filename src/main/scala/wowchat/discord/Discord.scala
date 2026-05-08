@@ -26,7 +26,16 @@ import scala.collection.mutable
 object Discord {
 
   def sendMessage(channel: MessageChannel, message: String): Unit = {
-    splitUpByLength(message, 2000).foreach(channel.sendMessage(_).queue)
+    splitUpByLength(message, 2000).foreach { chunk =>
+      channel.sendMessage(chunk).queue(
+        _ => (), // Success callback (do nothing)
+        error => {
+          // Failure callback - log the error
+          System.err.println(s"[Discord] Failed to send message to ${channel.getName}: ${error.getMessage}")
+          error.printStackTrace()
+        }
+      )
+    }
   }
 
   private def splitUpByLength(message: String, maxLength: Int): Seq[String] = {
