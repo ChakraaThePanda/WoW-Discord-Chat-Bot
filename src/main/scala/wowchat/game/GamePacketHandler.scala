@@ -105,6 +105,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     executorService.scheduleWithFixedDelay(() => {
       // Enforce updating guild roster only once per minute
       if (System.currentTimeMillis - lastRequestedGuildRoster >= 60000) {
+        logger.info("[ROSTER POLL] Calling updateGuildRoster from: SCHEDULED (every 61 seconds)")
         updateGuildRoster
       }
     }, 61, 61, TimeUnit.SECONDS)
@@ -169,6 +170,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   }
 
   private def updateGuildRoster: Unit = {
+    logger.info("═══════════════════════════════════════════════════════")
+    logger.info("[ROSTER POLL] Sending CMSG_GUILD_ROSTER request")
+    logger.info("[ROSTER POLL] Full guild roster query initiated")
+    logger.info("═══════════════════════════════════════════════════════")
     lastRequestedGuildRoster = System.currentTimeMillis
     ctx.get.writeAndFlush(buildGuildRosterPacket)
   }
@@ -528,6 +533,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     // After this, roster updates happen via guild events (login/logout)
     // Scheduled polling only runs if guildDiscordLinking.enabled = true
     if (guildGuid != 0) {
+      logger.info("[ROSTER POLL] Calling updateGuildRoster from: STARTUP (initial population)")
       updateGuildRoster
     }
 
@@ -639,6 +645,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       Global.discord.sendGuildNotification(eventConfigKey, formatted)
     }
 
+    logger.info(s"[ROSTER POLL] Calling updateGuildRoster from: GUILD EVENT ($eventConfigKey)")
     updateGuildRoster
   }
 
