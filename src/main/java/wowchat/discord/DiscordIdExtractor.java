@@ -29,12 +29,12 @@ public final class DiscordIdExtractor {
      * Call this once during bot startup.
      */
     public static void initialize(Config config) {
-        if (config.hasPath("discord.guildLinkingNoteLocation")) {
-            noteLocation = config.getString("discord.guildLinkingNoteLocation").toLowerCase();
-            if (!noteLocation.equals("officer") && !noteLocation.equals("public")) {
-                System.err.println("[DiscordIdExtractor] Invalid guildLinkingNoteLocation: " + noteLocation + ", defaulting to 'officer'");
-                noteLocation = "officer";
-            }
+        // Use ConfigHelper for consistent config reading with backward compatibility
+        noteLocation = ConfigHelper.getDiscordLinkingNoteLocation();
+        
+        if (!noteLocation.equals("officer") && !noteLocation.equals("public")) {
+            System.err.println("[DiscordIdExtractor] Invalid guildLinkingNoteLocation: " + noteLocation + ", defaulting to 'officer'");
+            noteLocation = "officer";
         }
     }
     

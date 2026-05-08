@@ -277,36 +277,17 @@ public final class GuildRoleSync {
             Config config = ConfigFactory.load(ConfigFactory.parseFile(
                 new java.io.File(System.getProperty("config.file", "wowchat.conf"))));
 
-            // Check if guild role sync is enabled (NEW path with fallback to OLD behavior)
-            boolean enabled = true; // Default enabled for backward compat
-            if (config.hasPath("guildRoleSync.enabled")) {
-                enabled = config.getBoolean("guildRoleSync.enabled");
-            } else if (config.hasPath("guildRoleSync")) {
-                // Old config exists (just the array), assume enabled
-                enabled = true;
-            }
-            
-            if (!enabled) {
+            // Check if guild role sync is enabled using ConfigHelper
+            if (!ConfigHelper.isRoleSyncEnabled()) {
                 System.out.println("[GuildRoleSync] Feature disabled in config");
                 rankToRoleId = Collections.emptyMap();
                 return;
             }
 
-            // Try NEW path first, fall back to OLD
-            String configPath = "guildRoleSync.ranks";
-            if (!config.hasPath(configPath) && config.hasPath("guildRoleSync")) {
-                // Check if old format is a list (backward compat)
-                try {
-                    config.getConfigList("guildRoleSync");
-                    configPath = "guildRoleSync";
-                } catch (ConfigException.WrongType e) {
-                    // New format but no ranks defined
-                    rankToRoleId = Collections.emptyMap();
-                    return;
-                }
-            }
+            // Get config path using ConfigHelper
+            String configPath = ConfigHelper.getRoleSyncConfigPath();
             
-            if (!config.hasPath(configPath)) {
+            if (configPath == null || !config.hasPath(configPath)) {
                 rankToRoleId = Collections.emptyMap();
                 return;
             }

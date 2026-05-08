@@ -74,22 +74,7 @@ public final class GuildDiscordAuditPublisher {
     }
 
     private static boolean isAuditEnabled() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            // Try NEW path first, fall back to OLD
-            if (config.hasPath("guildRoster.audit.enabled")) {
-                return config.getBoolean("guildRoster.audit.enabled");
-            } else if (config.hasPath("guildAuditEnabled")) {
-                return config.getBoolean("guildAuditEnabled");
-            }
-            // Default enabled for backward compat
-            return true;
-        } catch (Throwable t) {
-            return false;
-        }
+        return ConfigHelper.isAuditEnabled();
     }
 
     private static MessageEmbed buildAuditEmbed(net.dv8tion.jda.api.JDA jda) {
@@ -447,41 +432,16 @@ public final class GuildDiscordAuditPublisher {
     // -------------------------------------------------------------------------
     
     public static List<String> getAuditRoleIds() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            // Try NEW path first, fall back to OLD
-            if (config.hasPath("guildRoster.audit.roleIds")) {
-                return config.getStringList("guildRoster.audit.roleIds");
-            } else if (config.hasPath("guildAuditRoleIds")) {
-                return config.getStringList("guildAuditRoleIds");
-            }
-        } catch (Throwable t) {}
-        return Collections.emptyList();
+        return ConfigHelper.getAuditRoleIds();
     }
     
     private static String getLinkedRankToCheck() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            // Try NEW path first, fall back to OLD
-            String rankToCheck = null;
-            if (config.hasPath("guildRoster.audit.linkedRankToCheck")) {
-                rankToCheck = config.getString("guildRoster.audit.linkedRankToCheck");
-            } else if (config.hasPath("guildAuditLinkedRankToCheck")) {
-                rankToCheck = config.getString("guildAuditLinkedRankToCheck");
-            }
-            
-            // Return null if empty or blank (disables the feature)
-            if (rankToCheck != null && rankToCheck.trim().isEmpty()) {
-                return null;
-            }
-            return rankToCheck;
-        } catch (Throwable t) {}
-        return null;
+        String rankToCheck = ConfigHelper.getAuditLinkedRankToCheck();
+        
+        // Return null if empty or blank (disables the feature)
+        if (rankToCheck != null && rankToCheck.trim().isEmpty()) {
+            return null;
+        }
+        return rankToCheck;
     }
 }

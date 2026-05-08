@@ -207,46 +207,14 @@ public class GuildInactivityManager {
      * Extract Discord ID from officer note (18-19 digit snowflake)
      */
     private static boolean isInactivityEnabled() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            return config.hasPath("guildRoster.inactivity.enabled") 
-                && config.getBoolean("guildRoster.inactivity.enabled");
-        } catch (Throwable t) {
-            return false;
-        }
+        return ConfigHelper.isInactivityEnabled();
     }
 
     private static float getInactiveDays() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            if (config.hasPath("guildRoster.inactivity.inactiveDays")) {
-                int days = config.getInt("guildRoster.inactivity.inactiveDays");
-                return (float) days;
-            }
-            return 30.0f; // Default 30 days
-        } catch (Throwable t) {
-            return 30.0f;
-        }
+        return (float) ConfigHelper.getInactivityDays();
     }
 
     private static String getInactiveRoleId() {
-        try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            if (config.hasPath("guildRoster.inactivity.inactiveRoleId")) {
-                return config.getString("guildRoster.inactivity.inactiveRoleId");
-            }
-            return null;
-        } catch (Throwable t) {
-            return null;
-        }
+        return ConfigHelper.getInactivityRoleId();
     }
 }

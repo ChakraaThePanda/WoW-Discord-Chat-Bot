@@ -390,13 +390,8 @@ public final class GuildRosterPublisher {
             Config config = ConfigFactory.parseFile(new File(configFile))
                 .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
 
-            // Check if guild roster is enabled (parent check)
-            boolean enabled = true; // Default enabled for backward compat
-            if (config.hasPath("guildRoster.enabled")) {
-                enabled = config.getBoolean("guildRoster.enabled");
-            }
-            
-            if (!enabled) {
+            // Check if guild roster is enabled using ConfigHelper
+            if (!ConfigHelper.isGuildRosterEnabled()) {
                 System.out.println("[GuildRoster] Feature disabled in config");
                 channelId = 0L;
                 updateMinutes = 5;
@@ -404,22 +399,18 @@ public final class GuildRosterPublisher {
                 return;
             }
 
-            // Channel ID - try NEW path first, fall back to OLD
-            channelId = 0L;
-            try {
-                if (config.hasPath("guildRoster.channelId")) {
-                    channelId = config.getLong("guildRoster.channelId");
-                } else if (config.hasPath("guildRosterChannelId")) {
-                    channelId = config.getLong("guildRosterChannelId");
-                }
-            } catch (ConfigException.WrongType e) {
+            // Channel ID using ConfigHelper
+            String channelIdStr = ConfigHelper.getGuildRosterChannelId();
+            if (channelIdStr != null) {
                 try {
-                    String idStr = config.hasPath("guildRoster.channelId")
-                        ? config.getString("guildRoster.channelId")
-                        : config.getString("guildRosterChannelId");
-                    channelId = Long.parseLong(idStr.trim());
-                } catch (Throwable ignored) {}
-            } catch (ConfigException.Missing ignored) {}
+                    channelId = Long.parseLong(channelIdStr.trim());
+                } catch (NumberFormatException e) {
+                    System.err.println("[GuildRoster] Invalid channel ID: " + channelIdStr);
+                    channelId = 0L;
+                }
+            } else {
+                channelId = 0L;
+            }
 
             updateMinutes = 5;
             try {

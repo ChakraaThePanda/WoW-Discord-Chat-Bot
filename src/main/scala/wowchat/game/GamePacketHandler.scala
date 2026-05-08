@@ -116,14 +116,13 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       val config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
         .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true))
       
-      // Check if any feature that needs roster polling is enabled
-      val onlineListEnabled = !config.hasPath("guildOnlineList.enabled") || config.getBoolean("guildOnlineList.enabled")
-      val rosterEnabled = !config.hasPath("guildRoster.enabled") || config.getBoolean("guildRoster.enabled")
-      val roleSyncEnabled = !config.hasPath("guildRoleSync.enabled") || config.getBoolean("guildRoleSync.enabled")
+      // Only poll roster if Discord ID linking is enabled
+      // (This covers role sync, audit, stats, roster, and inactivity - all nested under it)
+      config.hasPath("guildDiscordLinking.enabled") && 
+        config.getBoolean("guildDiscordLinking.enabled")
       
-      onlineListEnabled || rosterEnabled || roleSyncEnabled
     } catch {
-      case _: Throwable => true // Default to enabled if config check fails
+      case _: Throwable => false // Default to disabled if config check fails
     }
   }
 
@@ -520,9 +519,15 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     runKeepAliveExecutor
     runGuildRosterExecutor
     
-    // Only query guild info if roster-dependent features are enabled
-    if (guildGuid != 0 && isAnyRosterFeatureEnabled()) {
+    // Always query guild name if in a guild (needed for Who's Online footer)
+    if (guildGuid != 0) {
       queryGuildName
+    }
+    
+    // Always do initial roster query if in a guild (populates Who's Online on startup)
+    // After this, roster updates happen via guild events (login/logout)
+    // Scheduled polling only runs if guildDiscordLinking.enabled = true
+    if (guildGuid != 0) {
       updateGuildRoster
     }
 
