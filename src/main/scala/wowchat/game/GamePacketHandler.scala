@@ -95,38 +95,18 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   }
 
   private def runGuildRosterExecutor: Unit = {
-    // Only poll roster if features actually need it
-    val needsRoster = isAnyRosterFeatureEnabled()
-    if (!needsRoster) {
-      logger.info("Guild roster polling disabled - no features require it")
-      return
-    }
+    // Always run scheduled roster polling for Who's Online and Bot Status
+    // guildDiscordLinking.enabled only controls Discord ID-dependent features (audit/stats/roles/inactivity)
+    // No more guild event polling = predictable 60 queries/hour regardless of guild size
     
     executorService.scheduleWithFixedDelay(() => {
       // Enforce updating guild roster only once per minute
       if (System.currentTimeMillis - lastRequestedGuildRoster >= 60000) {
-        logger.info("[ROSTER POLL] Calling updateGuildRoster from: SCHEDULED (every 61 seconds)")
         updateGuildRoster
       }
     }, 61, 61, TimeUnit.SECONDS)
   }
   
-  private def isAnyRosterFeatureEnabled(): Boolean = {
-    try {
-      val configFile = System.getProperty("wowchat.configFile", "wowchat.conf")
-      val config = com.typesafe.config.ConfigFactory.parseFile(new java.io.File(configFile))
-        .resolve(com.typesafe.config.ConfigResolveOptions.defaults().setAllowUnresolved(true))
-      
-      // Only poll roster if Discord ID linking is enabled
-      // (This covers role sync, audit, stats, roster, and inactivity - all nested under it)
-      config.hasPath("guildDiscordLinking.enabled") && 
-        config.getBoolean("guildDiscordLinking.enabled")
-      
-    } catch {
-      case _: Throwable => false // Default to disabled if config check fails
-    }
-  }
-
   def buildGuildiesOnline: String = {
     val characterName = Global.config.wow.character
 
@@ -170,10 +150,6 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   }
 
   private def updateGuildRoster: Unit = {
-    logger.info("═══════════════════════════════════════════════════════")
-    logger.info("[ROSTER POLL] Sending CMSG_GUILD_ROSTER request")
-    logger.info("[ROSTER POLL] Full guild roster query initiated")
-    logger.info("═══════════════════════════════════════════════════════")
     lastRequestedGuildRoster = System.currentTimeMillis
     ctx.get.writeAndFlush(buildGuildRosterPacket)
   }
@@ -529,9 +505,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       queryGuildName
     }
     
-    // Always do initial roster query if in a guild (populates Who's Online on startup)
-    // After this, roster updates happen via guild events (login/logout)
-    // Scheduled polling only runs if guildDiscordLinking.enabled = true
+    // Always do initial roster query if in a guild (populates Who's Online immediately)
+    // Scheduled polling runs every 61 seconds thereafter
+    // No more guild event polling = predictable, consistent load
     if (guildGuid != 0) {
       logger.info("[ROSTER POLL] Calling updateGuildRoster from: STARTUP (initial population)")
       updateGuildRoster
@@ -645,8 +621,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       Global.discord.sendGuildNotification(eventConfigKey, formatted)
     }
 
-    logger.info(s"[ROSTER POLL] Calling updateGuildRoster from: GUILD EVENT ($eventConfigKey)")
-    updateGuildRoster
+    // Roster updates now handled by scheduled polling only
+    // This eliminates ~37 queries/hour from guild events in large guilds
   }
 
   private def handle_SMSG_GUILD_ROSTER(msg: Packet): Unit = {
@@ -724,7 +700,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
           sendNameQuery(chatMessage.guid)
         })(buf => if (buf.size < 10) buf += chatMessage)
       })(name => {
-        Global.discord.sendMessageFromWow(Some(name.name), chatMessage.message, chatMessage.tp, chatMessage.channel)
+        // Check if player is ignored before relaying to Discord
+        if (!wowchat.common.IgnoreManager.isIgnored(name.name)) {
+          Global.discord.sendMessageFromWow(Some(name.name), chatMessage.message, chatMessage.tp, chatMessage.channel)
+        }
       })
     }
   }

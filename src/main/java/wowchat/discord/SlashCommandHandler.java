@@ -33,6 +33,12 @@ public final class SlashCommandHandler {
             Commands.slash("online", "Show which guild members are currently online"),
 
             Commands.slash("gmotd", "Show the guild message of the day"),
+            
+            Commands.slash("ignore", "[Bot Owner Only] Ignore a player's messages in WoW chat")
+                .addOption(OptionType.STRING, "player", "Player name to ignore", true),
+            
+            Commands.slash("unignore", "[Bot Owner Only] Unignore a previously ignored player")
+                .addOption(OptionType.STRING, "player", "Player name to unignore", true),
 
             Commands.slash("profession", "Manage character professions")
                 .addSubcommands(

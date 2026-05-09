@@ -90,6 +90,7 @@ object WoWChat extends StrictLogging {
         wowchat.discord.GuildRosterPublisher.init()
         wowchat.discord.DiscordDMHandler.init()
         wowchat.discord.AutoGuildInviteHandler.init()
+        wowchat.common.IgnoreManager.init()
         gameConnectionController.connect
       }
 

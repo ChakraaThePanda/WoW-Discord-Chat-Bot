@@ -14,7 +14,8 @@ import java.util.List;
  * All guild feature configuration goes through this utility to avoid
  * duplicating config reading logic across multiple files.
  * 
- * NO BACKWARD COMPATIBILITY - reads only the new nested structure.
+ * Each feature has its own enabled flag - no master switch.
+ * Roster polling happens regardless of feature configuration.
  */
 public final class ConfigHelper {
 
@@ -35,18 +36,8 @@ public final class ConfigHelper {
     }
 
     // =========================================================================
-    // GUILD DISCORD LINKING - Master switch
+    // NOTE LOCATION - Where to find Discord IDs in guild roster
     // =========================================================================
-
-    public static boolean isDiscordLinkingEnabled() {
-        try {
-            Config config = getConfig();
-            return config.hasPath("guildDiscordLinking.enabled") 
-                && config.getBoolean("guildDiscordLinking.enabled");
-        } catch (Throwable t) {
-            return false;
-        }
-    }
 
     public static String getDiscordLinkingNoteLocation() {
         try {
@@ -81,16 +72,14 @@ public final class ConfigHelper {
     // =========================================================================
 
     public static boolean isAuditEnabled() {
-        if (!isDiscordLinkingEnabled()) return false;
-        
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.guildRoster.audit.enabled")) {
                 return config.getBoolean("guildDiscordLinking.guildRoster.audit.enabled");
             }
-            return true; // Default enabled if Discord linking is on
+            return false; // Default disabled
         } catch (Throwable t) {
-            return true;
+            return false;
         }
     }
 
@@ -123,8 +112,6 @@ public final class ConfigHelper {
     // =========================================================================
 
     public static boolean isStatsEnabled() {
-        if (!isDiscordLinkingEnabled()) return false;
-        
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.guildRoster.stats.enabled")) {
@@ -154,16 +141,14 @@ public final class ConfigHelper {
     // =========================================================================
 
     public static boolean isGuildRosterEnabled() {
-        if (!isDiscordLinkingEnabled()) return false;
-        
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.guildRoster.roster.enabled")) {
                 return config.getBoolean("guildDiscordLinking.guildRoster.roster.enabled");
             }
-            return true; // Default enabled if Discord linking is on
+            return false; // Default disabled
         } catch (Throwable t) {
-            return true;
+            return false;
         }
     }
 
@@ -176,8 +161,6 @@ public final class ConfigHelper {
     // =========================================================================
 
     public static boolean isInactivityEnabled() {
-        if (!isDiscordLinkingEnabled()) return false;
-        
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.inactivity.enabled")) {
@@ -218,8 +201,6 @@ public final class ConfigHelper {
     // =========================================================================
 
     public static boolean isRoleSyncEnabled() {
-        if (!isDiscordLinkingEnabled()) return false;
-        
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.roleSync.enabled")) {

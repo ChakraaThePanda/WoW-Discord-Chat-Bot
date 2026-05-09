@@ -379,6 +379,37 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
           val result = game.handleGmotd()
           event.getHook.sendMessage(result.getOrElse("No guild message of the day.")).queue()
         })
+      
+      case "ignore" | "unignore" =>
+        event.deferReply().setEphemeral(true).queue()
+        
+        // Check if user is bot owner
+        jda.retrieveApplicationInfo().queue(appInfo => {
+          if (event.getUser.getId != appInfo.getOwner.getId) {
+            event.getHook.sendMessage("❌ Only the bot owner can use this command.").setEphemeral(true).queue()
+            return
+          }
+          
+          val player = event.getOption("player").getAsString
+          
+          event.getName match {
+            case "ignore" =>
+              if (wowchat.common.IgnoreManager.ignore(player)) {
+                event.getHook.sendMessage(s"✅ **$player** has been added to the ignore list.\nTheir messages will no longer be relayed to Discord.").setEphemeral(true).queue()
+              } else {
+                event.getHook.sendMessage(s"ℹ️ **$player** is already on the ignore list.").setEphemeral(true).queue()
+              }
+            
+            case "unignore" =>
+              if (wowchat.common.IgnoreManager.unignore(player)) {
+                event.getHook.sendMessage(s"✅ **$player** has been removed from the ignore list.\nTheir messages will now be relayed to Discord.").setEphemeral(true).queue()
+              } else {
+                event.getHook.sendMessage(s"ℹ️ **$player** is not on the ignore list.").setEphemeral(true).queue()
+              }
+          }
+        }, error => {
+          event.getHook.sendMessage("❌ Failed to verify bot ownership.").setEphemeral(true).queue()
+        })
 
       case "profession" =>
         wowchat.discord.SlashCommandHandler.handleProfCommand(event)
