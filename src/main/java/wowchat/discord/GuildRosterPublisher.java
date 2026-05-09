@@ -142,8 +142,10 @@ public final class GuildRosterPublisher {
         // Delay to avoid Discord rate limits
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // --- Build roster embed ---
-        postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
+        // --- Build roster embed (only if enabled) ---
+        if (ConfigHelper.isRosterPanelEnabled()) {
+            postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
+        }
     }
 
     // -------------------------------------------------------------------------

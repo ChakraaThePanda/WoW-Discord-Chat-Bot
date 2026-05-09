@@ -140,7 +140,18 @@ public final class ConfigHelper {
     // ROSTER PANEL
     // =========================================================================
 
+    /**
+     * Check if ANY of the guild roster features (audit, stats, or roster) are enabled.
+     * Used by GuildRosterPublisher to determine if it should initialize at all.
+     */
     public static boolean isGuildRosterEnabled() {
+        return isAuditEnabled() || isStatsEnabled() || isRosterPanelEnabled();
+    }
+
+    /**
+     * Check if the roster panel specifically is enabled.
+     */
+    public static boolean isRosterPanelEnabled() {
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.guildRoster.roster.enabled")) {
