@@ -401,7 +401,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
         .remove(nameQueryMessage.guid)
         .foreach(messages => {
           messages.foreach(message => {
-            Global.discord.sendMessageFromWow(Some(nameQueryMessage.name), message.message, message.tp, message.channel)
+            // Check ignore list before sending queued messages
+            if (!wowchat.common.IgnoreManager.isIgnored(nameQueryMessage.name)) {
+              Global.discord.sendMessageFromWow(Some(nameQueryMessage.name), message.message, message.tp, message.channel)
+            }
           })
           playerRoster += nameQueryMessage.guid -> Player(nameQueryMessage.name, nameQueryMessage.charClass)
         })
