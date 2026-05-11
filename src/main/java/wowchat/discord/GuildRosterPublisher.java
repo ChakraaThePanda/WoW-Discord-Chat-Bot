@@ -87,6 +87,13 @@ public final class GuildRosterPublisher {
     }
 
     private static void tick() {
+        // Skip update if game is disconnected - prevents "Unknown Guild" embeds
+        String guildIdentifier = GuildEmbedUtil.getGuildRealmIdentifier();
+        if (guildIdentifier.equals("Unknown Guild (Unknown Realm)")) {
+            // Bot is disconnected from game server, skip this update
+            return;
+        }
+
         // Refresh shared cache once per tick (OPTIMIZATION)
         GuildDataCache.getInstance().refresh();
         

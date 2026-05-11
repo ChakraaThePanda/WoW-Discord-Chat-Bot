@@ -221,6 +221,13 @@ public final class GuildOnlineListPublisher {
             return;
         }
 
+        // Skip update if game is disconnected - prevents "Unknown Guild" embeds
+        String guildIdentifier = GuildEmbedUtil.getGuildRealmIdentifier();
+        if (guildIdentifier.equals("Unknown Guild (Unknown Realm)")) {
+            // Bot is disconnected from game server, skip this update
+            return;
+        }
+
         // Build the sorted list of online member names (once, used for all channels)
         List<String> onlineNames = getOnlineNames();
         Collections.sort(onlineNames, String.CASE_INSENSITIVE_ORDER);
