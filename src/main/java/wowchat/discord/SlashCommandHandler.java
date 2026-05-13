@@ -40,6 +40,8 @@ public final class SlashCommandHandler {
             Commands.slash("unignore", "[Bot Owner Only] Unignore a previously ignored player")
                 .addOption(OptionType.STRING, "player", "Player name to unignore", true),
 
+            Commands.slash("ignored", "List all ignored players"),
+
             Commands.slash("profession", "Manage character professions")
                 .addSubcommands(
                     new SubcommandData("add", "Add or update a profession for a character (with optional skill level 1-450)")
@@ -161,6 +163,39 @@ public final class SlashCommandHandler {
     }
     
     /**
+     * Handle /ignored command - list all ignored players
+     */
+    public static void handleIgnoredCommand(SlashCommandInteractionEvent event) {
+        event.deferReply(true).queue();
+        
+        // Get ignored players list (no owner check - anyone can view)
+        scala.collection.immutable.List<String> scalaList = wowchat.common.IgnoreManager.getIgnoredPlayers();
+        java.util.List<String> ignoredPlayers = scala.collection.JavaConverters.seqAsJavaList(scalaList);
+        
+        if (ignoredPlayers.isEmpty()) {
+            event.getHook().sendMessage("✅ No players are currently ignored.").setEphemeral(true).queue();
+            return;
+        }
+        
+        // Build the list with capitalized first letters
+        StringBuilder sb = new StringBuilder();
+        sb.append("**Ignored (").append(ignoredPlayers.size()).append("):**\n");
+        
+        for (String name : ignoredPlayers) {
+            // Capitalize first letter
+            String displayName = name.substring(0, 1).toUpperCase() + name.substring(1);
+            sb.append("- **").append(displayName).append("**\n");
+        }
+        
+        String content = sb.toString().trim();
+        Button postButton = Button.primary("post_ignored", "Post to Channel");
+        event.getHook().sendMessage(content)
+            .addActionRow(postButton)
+            .setEphemeral(true)
+            .queue();
+    }
+    
+    /**
      * Handle button interactions for "Post to Channel"
      */
     public static void handleButtonInteraction(ButtonInteractionEvent event) {
@@ -186,6 +221,15 @@ public final class SlashCommandHandler {
             event.getChannel().sendMessage(originalContent)
                 .setAllowedMentions(java.util.Collections.emptyList())
                 .queue();
+            
+            // Acknowledge button click
+            event.reply("Posted to channel!").setEphemeral(true).queue();
+        } else if (buttonId.equals("post_ignored")) {
+            // Extract original message content
+            String originalContent = event.getMessage().getContentRaw();
+            
+            // Post non-ephemerally to channel
+            event.getChannel().sendMessage(originalContent).queue();
             
             // Acknowledge button click
             event.reply("Posted to channel!").setEphemeral(true).queue();

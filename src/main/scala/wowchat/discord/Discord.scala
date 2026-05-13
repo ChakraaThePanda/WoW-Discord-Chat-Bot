@@ -411,6 +411,9 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
           event.getHook.sendMessage("❌ Failed to verify bot ownership.").setEphemeral(true).queue()
         })
 
+      case "ignored" =>
+        wowchat.discord.SlashCommandHandler.handleIgnoredCommand(event)
+
       case "profession" =>
         wowchat.discord.SlashCommandHandler.handleProfCommand(event)
     }
