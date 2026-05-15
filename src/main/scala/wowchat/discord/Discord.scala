@@ -156,8 +156,14 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
 
   def sendMessageFromWow(from: Option[String], message: String, wowType: Byte, wowChannel: Option[String]): Unit = {
     Global.wowToDiscord.get((wowType, wowChannel.map(_.toLowerCase))).foreach(discordChannels => {
-      // Strip server-injected prefix (e.g. "{?" added by some private servers)
-      val cleanMessage = if (message.startsWith("{?")) message.substring(2) else message
+      // Strip server-injected prefixes (e.g. "{?" or "[HC] " added by some private servers)
+      val cleanMessage = if (message.startsWith("{?")) {
+        message.substring(2)
+      } else if (message.startsWith("[HC] ")) {
+        message.substring(5)
+      } else {
+        message
+      }
       val parsedLinks = messageResolver.resolveEmojis(messageResolver.stripColorCoding(messageResolver.resolveLinks(cleanMessage)))
 
       discordChannels.foreach {
