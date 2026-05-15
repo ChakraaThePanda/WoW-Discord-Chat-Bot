@@ -23,11 +23,7 @@ If you have any questions, add me on Discord: **Chakraa**
 ---
 
 ### How to Use
-
-#### Download
-* Head to the [latest release page](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot/releases) to check out the latest changes and download the [Source code (zip)](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot/archive/refs/heads/main.zip)
-
-#### Running the Bot
+* Download the [latest version](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot/archive/refs/heads/main.zip).
 * Open the ``wowchat.conf`` to configure the bot to your liking
 * Run `run.bat` (or `run.sh` on Linux) — this starts the watchdog which manages the bot automatically in case of server restarts
 * To run on Windows startup, place a shortcut to `run.bat` in your Windows Startup folder (`shell:startup`)
