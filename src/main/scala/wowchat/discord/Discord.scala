@@ -181,16 +181,32 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
 
           // Append guild death role mention if configured and message is a guild member death
           val finalMessage = guildDeathRoleId match {
-            case Some(roleId) if formatted.contains("has been slain by") =>
-              // Extract first word after "[SYSTEM]: " prefix
-              val stripped = formatted.replaceFirst("^.*\\]:\\s*", "")
-              val name = stripped.split(" ").headOption.getOrElse("").trim
-              val isGuildMember = name.nonEmpty && Global.game.exists {
-                case handler: wowchat.game.GamePacketHandler =>
-                  handler.getGuildRoster.valuesIterator.exists(_.name.equalsIgnoreCase(name))
-                case _ => false
+            case Some(roleId) =>
+              // Check for various death message patterns
+              val isDeathMessage = formatted.contains("has been slain by") || 
+                                   formatted.contains("has fallen at level") ||
+                                   formatted.contains("[Hardcore Death]")
+              
+              if (isDeathMessage) {
+                // Extract player name - try multiple patterns
+                val stripped = formatted.replaceFirst("^.*\\]:\\s*", "") // Remove prefix like "[SYSTEM]: "
+                val name = if (stripped.contains("[Hardcore Death]")) {
+                  // Pattern: [Hardcore Death] PlayerName has fallen...
+                  stripped.replaceFirst(".*\\[Hardcore Death\\]\\s*", "").split(" ").headOption.getOrElse("").trim
+                } else {
+                  // Pattern: PlayerName has been slain...
+                  stripped.split(" ").headOption.getOrElse("").trim
+                }
+                
+                val isGuildMember = name.nonEmpty && Global.game.exists {
+                  case handler: wowchat.game.GamePacketHandler =>
+                    handler.getGuildRoster.valuesIterator.exists(_.name.equalsIgnoreCase(name))
+                  case _ => false
+                }
+                if (isGuildMember) formatted + s" <@&$roleId>" else formatted
+              } else {
+                formatted
               }
-              if (isGuildMember) formatted + s" <@&$roleId>" else formatted
             case _ => formatted
           }
 
