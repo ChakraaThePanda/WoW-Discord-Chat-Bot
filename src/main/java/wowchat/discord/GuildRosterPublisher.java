@@ -357,6 +357,47 @@ public final class GuildRosterPublisher {
     }
 
     // -------------------------------------------------------------------------
+    // Find existing roster page by pattern (ignoring member count variations)
+    // -------------------------------------------------------------------------
+    
+    private static String findRosterPageByPattern(TextChannel channel, String pattern) {
+        try {
+            String ourIdentifier = GuildEmbedUtil.getGuildRealmIdentifier();
+            List<Message> history = channel.getHistory().retrievePast(100).complete();
+            if (history == null) return null;
+            
+            for (Message msg : history) {
+                User author = msg.getAuthor();
+                if (author == null || !author.isBot()) continue;
+                
+                List<MessageEmbed> embeds = msg.getEmbeds();
+                if (embeds != null && !embeds.isEmpty()) {
+                    MessageEmbed embed = embeds.get(0);
+                    String embedTitle = embed.getTitle();
+                    
+                    if (embedTitle != null) {
+                        // Remove only FIRST number in parens (member count) for comparison
+                        // "Guild Roster (264) (1/3)" -> "Guild Roster (1/3)"
+                        // "Guild Roster (264)" -> "Guild Roster"
+                        String embedPattern = embedTitle.replaceFirst("\\(\\d+\\)\\s*", "").trim();
+                        
+                        // Check if patterns match and footer is ours
+                        if (embedPattern.equals(pattern)) {
+                            MessageEmbed.Footer footer = embed.getFooter();
+                            if (footer != null && footer.getText() != null && footer.getText().startsWith(ourIdentifier)) {
+                                return msg.getId();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            System.err.println("[GuildRoster] Error searching for roster page: " + t.getMessage());
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
     // Post or edit an embed message
     // -------------------------------------------------------------------------
 
@@ -366,7 +407,11 @@ public final class GuildRosterPublisher {
     private static void postOrEditEmbed(TextChannel channel, MessageEmbed embed, String pageTitle,
                                         Setter setId, Getter getId, Setter clearId) {
         if (getId.get() == null) {
-            setId.set(GuildEmbedUtil.findEmbedByTitleAndFooter(channel, pageTitle));
+            // For roster pages with pagination, strip only the member count (first number in parens)
+            // "Guild Roster (264) (1/3)" -> "Guild Roster (1/3)"
+            // "Guild Roster (264)" -> "Guild Roster"
+            String searchPattern = pageTitle.replaceFirst("\\(\\d+\\)\\s*", "").trim();
+            setId.set(findRosterPageByPattern(channel, searchPattern));
         }
 
         if (getId.get() == null) {
