@@ -60,6 +60,10 @@ public final class GuildRosterPublisher {
     public static boolean isEnabled() { return channelId > 0L; }
     
     public static String getChannelIdString() { return channelId > 0L ? String.valueOf(channelId) : null; }
+    
+    private static boolean isShowUnlinkedEnabled() {
+        return ConfigHelper.isShowUnlinkedCharactersEnabled();
+    }
 
     public static synchronized void init() {
         if (started) return;
@@ -259,15 +263,21 @@ public final class GuildRosterPublisher {
             blocks.add(block.toString());
         }
 
-        // Unlinked section - add each character as a separate block so paging can split them
+        // Unlinked section - show count and instructions, optionally list characters
         if (!unlinked.isEmpty()) {
-            // Add header as first unlinked block
-            blocks.add("**Unlinked Characters (" + unlinked.size() + ")**\n");
-            
-            // Add each unlinked character as its own block (can be split across pages)
-            for (String charName : unlinked) {
-                String entry = "- " + (finalRoster != null ? formatCharEntry(charName, finalRoster) : charName) + "\n";
-                blocks.add(entry);
+            if (isShowUnlinkedEnabled()) {
+                // Show full list of unlinked characters
+                blocks.add("**Unlinked Characters (" + unlinked.size() + ")**\n");
+                
+                for (String charName : unlinked) {
+                    String entry = "- " + (finalRoster != null ? formatCharEntry(charName, finalRoster) : charName) + "\n";
+                    blocks.add(entry);
+                }
+            } else {
+                // Show count and instructions only
+                blocks.add("**Unlinked Characters (" + unlinked.size() + ")**\n"
+                    + "_Link your characters in-game to appear in this roster._\n"
+                    + "_You can check the how-to on the [Github](https://github.com/ChakraaThePanda/WoW-Discord-Chat-Bot)._\n");
             }
         }
 

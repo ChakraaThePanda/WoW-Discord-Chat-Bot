@@ -166,6 +166,22 @@ public final class ConfigHelper {
     public static boolean isRosterEnabled() {
         return isGuildRosterEnabled();
     }
+    
+    /**
+     * Check if unlinked characters should be shown in the roster panel.
+     * Defaults to true if not specified.
+     */
+    public static boolean isShowUnlinkedCharactersEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.roster.showUnlinkedCharacters")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.roster.showUnlinkedCharacters");
+            }
+            return true; // Default enabled
+        } catch (Throwable t) {
+            return true;
+        }
+    }
 
     // =========================================================================
     // INACTIVITY TRACKING
