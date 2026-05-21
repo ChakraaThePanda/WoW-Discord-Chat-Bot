@@ -224,7 +224,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", faction + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct)); // Added 5 spaces after %%
         }
         sb.append("```");
         return sb.toString();
@@ -256,7 +256,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", race + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct));
         }
         
         // Horde races
@@ -268,7 +268,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", race + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct));
         }
         
         sb.append("```");
@@ -301,7 +301,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", cls + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct));
         }
         sb.append("```");
         return sb.toString();
@@ -333,7 +333,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", bracket + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct));
         }
         sb.append("```");
         return sb.toString();
@@ -361,7 +361,7 @@ public final class GuildStatsPublisher {
             sb.append(String.format("%-17s ", prof + ":"));
             for (int i = 0; i < (MAX_BAR_LENGTH - bars); i++) sb.append(" ");
             for (int i = 0; i < bars; i++) sb.append("=");
-            sb.append(String.format(" %" + maxDigits + "d (%d%%)\n", count, pct));
+            sb.append(String.format(" %" + maxDigits + "d (%d%%)      \n", count, pct));
         }
         sb.append("```");
         return sb.toString();
