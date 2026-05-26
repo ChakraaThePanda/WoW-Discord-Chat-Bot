@@ -18,6 +18,9 @@ import java.util.List;
 public final class GuildEmbedUtil {
 
     private GuildEmbedUtil() {} // Utility class - no instantiation
+    
+    // Cache the last known identifier to avoid "Unknown Guild" after reconnects
+    private static String cachedIdentifier = null;
 
     /**
      * Get guild and realm identifier for embed footer.
@@ -32,12 +35,12 @@ public final class GuildEmbedUtil {
         try {
             Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
             if (gameOpt == null || gameOpt.isEmpty()) {
-                return "Unknown Guild (Unknown Realm)";
+                return cachedIdentifier != null ? cachedIdentifier : "Unknown Guild (Unknown Realm)";
             }
             
             GameCommandHandler handler = gameOpt.get();
             if (!(handler instanceof GamePacketHandler)) {
-                return "Unknown Guild (Unknown Realm)";
+                return cachedIdentifier != null ? cachedIdentifier : "Unknown Guild (Unknown Realm)";
             }
             
             GamePacketHandler gph = (GamePacketHandler) handler;
@@ -72,10 +75,22 @@ public final class GuildEmbedUtil {
                 // Realm name not available yet
             }
             
-            return guildName + " (" + realmName + ")";
+            String identifier = guildName + " (" + realmName + ")";
+            
+            // Only cache if we have real data (not Unknown)
+            if (!guildName.equals("Unknown Guild") && !realmName.equals("Unknown Realm")) {
+                cachedIdentifier = identifier;
+            }
+            
+            // If we still have Unknown but have a cached value, use cached
+            if ((guildName.equals("Unknown Guild") || realmName.equals("Unknown Realm")) && cachedIdentifier != null) {
+                return cachedIdentifier;
+            }
+            
+            return identifier;
             
         } catch (Throwable t) {
-            return "Unknown Guild (Unknown Realm)";
+            return cachedIdentifier != null ? cachedIdentifier : "Unknown Guild (Unknown Realm)";
         }
     }
     
