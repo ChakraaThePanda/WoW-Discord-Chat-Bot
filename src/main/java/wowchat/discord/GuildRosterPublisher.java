@@ -239,14 +239,32 @@ public final class GuildRosterPublisher {
         Map<String, List<String>> byDiscordId = new LinkedHashMap<>();
         List<String> unlinked = new ArrayList<>();
 
+        // Collect all Discord IDs that appear in notes first
+        Map<String, String> discordIdByChar = new LinkedHashMap<>();
         for (String charName : sortedChars) {
             if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
-            
-            // Use DiscordIdExtractor to respect configured note location
             GuildMember member = GuildDataCache.getInstance().getMember(charName);
             String discordId = DiscordIdExtractor.extractDiscordId(member);
-            
-            if (discordId != null && discordGuild.getMemberById(discordId) != null) {
+            if (discordId != null) discordIdByChar.put(charName, discordId);
+        }
+
+        // Find member across all guilds the bot is in (cache lookup, no API calls)
+        Map<String, Member> fetchedMembers = new HashMap<>();
+        Set<String> uniqueIds = new HashSet<>(discordIdByChar.values());
+        JDA jdaRef = GuildOnlineListPublisher.getJda();
+        if (jdaRef != null) {
+            for (String discordId : uniqueIds) {
+                for (Guild g : jdaRef.getGuilds()) {
+                    Member m = g.getMemberById(discordId);
+                    if (m != null) { fetchedMembers.put(discordId, m); break; }
+                }
+            }
+        }
+
+        for (String charName : sortedChars) {
+            if (ignoreLower.contains(charName.toLowerCase(Locale.ROOT))) continue;
+            String discordId = discordIdByChar.get(charName);
+            if (discordId != null && fetchedMembers.containsKey(discordId)) {
                 byDiscordId.computeIfAbsent(discordId, k -> new ArrayList<>()).add(charName);
             } else {
                 unlinked.add(charName);
@@ -256,8 +274,8 @@ public final class GuildRosterPublisher {
         // Sort linked users by Discord display name
         List<Map.Entry<String, List<String>>> linkedEntries = new ArrayList<>(byDiscordId.entrySet());
         linkedEntries.sort((a, b) -> {
-            Member ma = discordGuild.getMemberById(a.getKey());
-            Member mb = discordGuild.getMemberById(b.getKey());
+            Member ma = fetchedMembers.get(a.getKey());
+            Member mb = fetchedMembers.get(b.getKey());
             String na = ma != null ? ma.getEffectiveName() : a.getKey();
             String nb = mb != null ? mb.getEffectiveName() : b.getKey();
             return na.compareToIgnoreCase(nb);
@@ -266,7 +284,7 @@ public final class GuildRosterPublisher {
         // Build one block per linked user
         for (Map.Entry<String, List<String>> entry : linkedEntries) {
             StringBuilder block = new StringBuilder();
-            Member m = discordGuild.getMemberById(entry.getKey());
+            Member m = fetchedMembers.get(entry.getKey());
             String displayName = m != null ? m.getEffectiveName() : entry.getKey();
             int charCount = entry.getValue().size();
             block.append("<@").append(entry.getKey()).append("> - **").append(displayName).append("** (").append(charCount).append(")\n");

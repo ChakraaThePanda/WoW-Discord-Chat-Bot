@@ -64,8 +64,15 @@ public final class GuildDataCache {
                 GuildMember m = it.next();
                 String name = m.name();
                 newMembers.put(name, m);
-                
-                String note = m.officerNote() != null ? m.officerNote().trim() : "";
+
+                // Respect configured note location (officer or public)
+                String noteLocation = ConfigHelper.getDiscordLinkingNoteLocation();
+                String note;
+                if ("public".equals(noteLocation)) {
+                    note = m.publicNote() != null ? m.publicNote().trim() : "";
+                } else {
+                    note = m.officerNote() != null ? m.officerNote().trim() : "";
+                }
                 newNotes.put(name, note);
             }
             

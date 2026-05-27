@@ -299,6 +299,10 @@ public final class ProfessionManager {
                 if (firstColon < 0) continue;
                 
                 String key = entry.substring(0, firstColon).trim().replaceAll("\"", "").toLowerCase();
+
+                // Skip corrupted entries: numeric keys (timestamps leaked as names)
+                if (key.matches("\\d+") || key.equals("lastupdated")) continue;
+
                 String val = entry.substring(firstColon + 1).trim();
                 
                 List<String> profs = new ArrayList<>();
@@ -313,8 +317,9 @@ public final class ProfessionManager {
                     if (m.find()) {
                         String profsList = m.group(1);
                         for (String prof : profsList.split(",")) {
-                            String cleanProf = prof.trim().replaceAll("\"", "");
-                            if (!cleanProf.isEmpty()) profs.add(cleanProf);
+                            String cleanProf = prof.trim().replaceAll("\"", "").replaceAll("[\\r\\n}]", "").trim();
+                            // Skip empty or purely numeric entries (corrupted timestamps)
+                            if (!cleanProf.isEmpty() && !cleanProf.matches("\\d+")) profs.add(cleanProf);
                         }
                     }
                     
