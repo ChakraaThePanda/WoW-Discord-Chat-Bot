@@ -81,7 +81,8 @@ public final class GuildOnlineListPublisher {
     }
 
     /** Health file path - Watchdog reads this to know WoW packets are still flowing. */
-    private static final String WOW_HEALTH_FILE = "wow.health";
+    private static final String WOW_HEALTH_FILE     = "data/wow.health";
+    private static final String DISCORD_HEALTH_FILE = "data/discord.health";
 
     /** How often we write the health file (seconds). */
     private static final int HEALTH_WRITE_INTERVAL_SEC = 30;
@@ -160,7 +161,8 @@ public final class GuildOnlineListPublisher {
                 JDA jda = getJda();
                 if (jda != null && jda.getStatus() == JDA.Status.CONNECTED) {
                     byte[] data = Long.toString(System.currentTimeMillis()).getBytes("UTF-8");
-                    Files.write(Paths.get("discord.health"), data,
+                    new File("data").mkdirs();
+                    Files.write(Paths.get(DISCORD_HEALTH_FILE), data,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 }
             } catch (Throwable t) {
@@ -195,6 +197,7 @@ public final class GuildOnlineListPublisher {
             if (!((GamePacketHandler) handler).isInWorld()) return;
 
             byte[] data = Long.toString(System.currentTimeMillis()).getBytes("UTF-8");
+            new File("data").mkdirs();
             Files.write(Paths.get(WOW_HEALTH_FILE), data,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Throwable t) {

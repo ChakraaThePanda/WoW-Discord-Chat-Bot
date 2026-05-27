@@ -201,6 +201,16 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     })
   }
 
+  def sendGuildKick(playerName: String): Unit = {
+    logger.info(s"[BanList] Sending guild kick to: $playerName")
+    ctx.fold(logger.error("Cannot send guild kick! Not connected to WoW!"))(ctx => {
+      val out = PooledByteBufAllocator.DEFAULT.buffer(64)
+      out.writeBytes(playerName.getBytes("UTF-8"))
+      out.writeByte(0)
+      ctx.writeAndFlush(Packet(CMSG_GUILD_KICK, out))
+    })
+  }
+
   private def handle_SMSG_GUILD_INVITE(msg: Packet): Unit = {
     // Bot received a guild invite — ignore silently
   }
@@ -401,8 +411,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
         .remove(nameQueryMessage.guid)
         .foreach(messages => {
           messages.foreach(message => {
-            // Check ignore list before sending queued messages
-            if (!wowchat.common.IgnoreManager.isIgnored(nameQueryMessage.name)) {
+            // Check ignore and ban lists before sending queued messages
+            if (!wowchat.discord.IgnoreManager.isIgnored(nameQueryMessage.name) &&
+                !wowchat.discord.SlashCommandHandler.isBanned(nameQueryMessage.name)) {
               Global.discord.sendMessageFromWow(Some(nameQueryMessage.name), message.message, message.tp, message.channel)
             }
           })
@@ -703,8 +714,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
           sendNameQuery(chatMessage.guid)
         })(buf => if (buf.size < 10) buf += chatMessage)
       })(name => {
-        // Check if player is ignored before relaying to Discord
-        if (!wowchat.common.IgnoreManager.isIgnored(name.name)) {
+        // Check if player is ignored or banned before relaying to Discord
+        if (!wowchat.discord.IgnoreManager.isIgnored(name.name) &&
+            !wowchat.discord.SlashCommandHandler.isBanned(name.name)) {
           Global.discord.sendMessageFromWow(Some(name.name), chatMessage.message, chatMessage.tp, chatMessage.channel)
         }
       })

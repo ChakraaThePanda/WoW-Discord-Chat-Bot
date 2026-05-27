@@ -30,8 +30,8 @@ import java.util.List;
  */
 public final class WatchdogMain {
 
-    private static final String WOW_HEALTH_FILE         = "wow.health";
-    private static final String DISCORD_HEALTH_FILE     = "discord.health";
+    private static final String WOW_HEALTH_FILE         = "data/wow.health";
+    private static final String DISCORD_HEALTH_FILE     = "data/discord.health";
 
     private static final int    STARTUP_TIMEOUT_SECONDS = 120;
     private static final int    WOW_STALE_SECONDS       = 180;  // 3 min

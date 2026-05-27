@@ -36,6 +36,21 @@ public final class ConfigHelper {
     }
 
     // =========================================================================
+    // COMMAND ROLE IDs - Controls who can use privileged slash commands
+    // (/profession add/remove, /ignore, /unignore, /ban, /unban)
+    // =========================================================================
+
+    public static List<String> getCommandRoleIds() {
+        try {
+            Config config = getConfig();
+            if (!config.hasPath("discord.commandRoleIds")) return Collections.emptyList();
+            return config.getStringList("discord.commandRoleIds");
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
+
+    // =========================================================================
     // NOTE LOCATION - Where to find Discord IDs in guild roster
     // =========================================================================
 

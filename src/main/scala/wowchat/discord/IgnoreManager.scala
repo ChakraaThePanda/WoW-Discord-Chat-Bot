@@ -1,4 +1,4 @@
-package wowchat.common
+package wowchat.discord
 
 import java.io.{File, PrintWriter}
 import scala.io.Source
@@ -13,11 +13,13 @@ import scala.collection.mutable
  */
 object IgnoreManager {
 
-  private val IGNORE_FILE = "ignored_players.json"
+  private val DATA_DIR  = "data"
+  private val IGNORE_FILE = s"$DATA_DIR/ignored_players.json"
   private val ignoredPlayers = mutable.Set[String]()
 
   // Load ignore list on startup
   def init(): Unit = {
+    new File(DATA_DIR).mkdirs()
     val file = new File(IGNORE_FILE)
     if (file.exists()) {
       try {

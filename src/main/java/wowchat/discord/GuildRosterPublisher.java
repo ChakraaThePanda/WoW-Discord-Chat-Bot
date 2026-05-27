@@ -100,6 +100,21 @@ public final class GuildRosterPublisher {
 
         // Refresh shared cache once per tick (OPTIMIZATION)
         GuildDataCache.getInstance().refresh();
+
+        // --- Ban list enforcement: kick any banned player found in the guild roster ---
+        Collection<GuildMember> allMembers = GuildDataCache.getInstance().getMembers(false);
+        Option<wowchat.game.GameCommandHandler> gameOptForKick = Global$.MODULE$.game();
+        if (gameOptForKick != null && !gameOptForKick.isEmpty()
+                && gameOptForKick.get() instanceof wowchat.game.GamePacketHandler) {
+            wowchat.game.GamePacketHandler kickHandler =
+                (wowchat.game.GamePacketHandler) gameOptForKick.get();
+            for (GuildMember member : allMembers) {
+                if (SlashCommandHandler.isBanned(member.name())) {
+                    System.out.println("[BanList] Kicking banned player: " + member.name());
+                    kickHandler.sendGuildKick(member.name());
+                }
+            }
+        }
         
         // Clean up stale profession entries (1 hour grace period)
         Collection<GuildMember> currentMembers = GuildDataCache.getInstance().getMembers(true);

@@ -404,37 +404,65 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
       
       case "ignore" | "unignore" =>
         event.deferReply().setEphemeral(true).queue()
-        
-        // Check if user is bot owner
+        val guild = event.getGuild
+        val userId = event.getUser.getId
         jda.retrieveApplicationInfo().queue(appInfo => {
-          if (event.getUser.getId != appInfo.getOwner.getId) {
-            event.getHook.sendMessage("❌ Only the bot owner can use this command.").setEphemeral(true).queue()
-            return
+          val isOwner = userId == appInfo.getOwner.getId
+          val hasRole = guild != null && wowchat.discord.ProfessionManager.hasCommandRole(userId, guild)
+          if (!isOwner && !hasRole) {
+            event.getHook.sendMessage("❌ You don't have permission to use this command.").setEphemeral(true).queue()
+          } else {
+            val player = event.getOption("player").getAsString
+            event.getName match {
+              case "ignore" =>
+                if (wowchat.discord.IgnoreManager.ignore(player)) {
+                  event.getHook.sendMessage(s"✅ **$player** has been added to the ignore list.\nTheir messages will no longer be relayed to Discord.").setEphemeral(true).queue()
+                } else {
+                  event.getHook.sendMessage(s"ℹ️ **$player** is already on the ignore list.").setEphemeral(true).queue()
+                }
+              case "unignore" =>
+                if (wowchat.discord.IgnoreManager.unignore(player)) {
+                  event.getHook.sendMessage(s"✅ **$player** has been removed from the ignore list.\nTheir messages will now be relayed to Discord.").setEphemeral(true).queue()
+                } else {
+                  event.getHook.sendMessage(s"ℹ️ **$player** is not on the ignore list.").setEphemeral(true).queue()
+                }
+            }
           }
-          
-          val player = event.getOption("player").getAsString
-          
-          event.getName match {
-            case "ignore" =>
-              if (wowchat.common.IgnoreManager.ignore(player)) {
-                event.getHook.sendMessage(s"✅ **$player** has been added to the ignore list.\nTheir messages will no longer be relayed to Discord.").setEphemeral(true).queue()
-              } else {
-                event.getHook.sendMessage(s"ℹ️ **$player** is already on the ignore list.").setEphemeral(true).queue()
-              }
-            
-            case "unignore" =>
-              if (wowchat.common.IgnoreManager.unignore(player)) {
-                event.getHook.sendMessage(s"✅ **$player** has been removed from the ignore list.\nTheir messages will now be relayed to Discord.").setEphemeral(true).queue()
-              } else {
-                event.getHook.sendMessage(s"ℹ️ **$player** is not on the ignore list.").setEphemeral(true).queue()
-              }
-          }
-        }, error => {
-          event.getHook.sendMessage("❌ Failed to verify bot ownership.").setEphemeral(true).queue()
-        })
+        }, _ => event.getHook.sendMessage("❌ Failed to verify permissions.").setEphemeral(true).queue())
 
       case "ignored" =>
         wowchat.discord.SlashCommandHandler.handleIgnoredCommand(event)
+
+      case "ban" | "unban" =>
+        event.deferReply().setEphemeral(true).queue()
+        val guild = event.getGuild
+        val userId = event.getUser.getId
+        jda.retrieveApplicationInfo().queue(appInfo => {
+          val isOwner = userId == appInfo.getOwner.getId
+          val hasRole = guild != null && wowchat.discord.ProfessionManager.hasCommandRole(userId, guild)
+          if (!isOwner && !hasRole) {
+            event.getHook.sendMessage("❌ You don't have permission to use this command.").setEphemeral(true).queue()
+          } else {
+            val player = event.getOption("player").getAsString
+            event.getName match {
+              case "ban" =>
+                if (wowchat.discord.SlashCommandHandler.ban(player)) {
+                  event.getHook.sendMessage(s"✅ **$player** has been added to the ban list.\nTheir messages will no longer be relayed to Discord, and they will be auto-kicked from the guild each cycle.").setEphemeral(true).queue()
+                } else {
+                  event.getHook.sendMessage(s"ℹ️ **$player** is already on the ban list.").setEphemeral(true).queue()
+                }
+              case "unban" =>
+                if (wowchat.discord.SlashCommandHandler.unban(player)) {
+                  event.getHook.sendMessage(s"✅ **$player** has been removed from the ban list.\nTheir messages will now be relayed to Discord, and they will no longer be auto-kicked.").setEphemeral(true).queue()
+                } else {
+                  event.getHook.sendMessage(s"ℹ️ **$player** is not on the ban list.").setEphemeral(true).queue()
+                }
+            }
+          }
+        }, _ => event.getHook.sendMessage("❌ Failed to verify permissions.").setEphemeral(true).queue())
+
+      case "banned" =>
+        wowchat.discord.SlashCommandHandler.handleBannedCommand(event)
 
       case "profession" =>
         wowchat.discord.SlashCommandHandler.handleProfCommand(event)

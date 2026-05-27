@@ -12,7 +12,16 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 
+import java.io.File;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +34,84 @@ public final class SlashCommandHandler {
 
     private SlashCommandHandler() {}
 
+    // -------------------------------------------------------------------------
+    // Ban list - mirrors IgnoreManager pattern but in Java, stored in data/
+    // -------------------------------------------------------------------------
+
+    private static final String BAN_FILE = "data/banned_players.json";
+    private static final Set<String> bannedPlayers = new TreeSet<>(); // TreeSet = always sorted
+
+    public static void initBanList() {
+        new File("data").mkdirs();
+        File f = new File(BAN_FILE);
+        if (!f.exists()) {
+            saveBanList();
+            return;
+        }
+        try {
+            String content = new String(Files.readAllBytes(Paths.get(BAN_FILE)), "UTF-8");
+            // Parse {"banned": ["name1", "name2"]}
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\"banned\"\\s*:\\s*\\[(.*?)\\]", java.util.regex.Pattern.DOTALL)
+                .matcher(content);
+            if (m.find()) {
+                String arr = m.group(1);
+                for (String part : arr.split(",")) {
+                    String name = part.trim().replaceAll("\"", "");
+                    if (!name.isEmpty()) bannedPlayers.add(name.toLowerCase());
+                }
+            }
+            System.out.println("[BanList] Loaded " + bannedPlayers.size() + " banned players.");
+        } catch (Throwable t) {
+            System.err.println("[BanList] Failed to load ban list: " + t.getMessage());
+        }
+    }
+
+    public static boolean ban(String playerName) {
+        String normalized = playerName.toLowerCase();
+        if (bannedPlayers.contains(normalized)) return false;
+        bannedPlayers.add(normalized);
+        saveBanList();
+        System.out.println("[BanList] Banned: " + playerName);
+        return true;
+    }
+
+    public static boolean unban(String playerName) {
+        String normalized = playerName.toLowerCase();
+        if (!bannedPlayers.contains(normalized)) return false;
+        bannedPlayers.remove(normalized);
+        saveBanList();
+        System.out.println("[BanList] Unbanned: " + playerName);
+        return true;
+    }
+
+    public static boolean isBanned(String playerName) {
+        return bannedPlayers.contains(playerName.toLowerCase());
+    }
+
+    public static List<String> getBannedPlayers() {
+        return new ArrayList<>(bannedPlayers); // already sorted by TreeSet
+    }
+
+    private static void saveBanList() {
+        try {
+            new File("data").mkdirs();
+            StringBuilder sb = new StringBuilder("{\"banned\": [");
+            boolean first = true;
+            for (String name : bannedPlayers) {
+                if (!first) sb.append(", ");
+                first = false;
+                sb.append("\"").append(name).append("\"");
+            }
+            sb.append("]}");
+            try (PrintWriter pw = new PrintWriter(new File(BAN_FILE), "UTF-8")) {
+                pw.println(sb.toString());
+            }
+        } catch (Throwable t) {
+            System.err.println("[BanList] Failed to save ban list: " + t.getMessage());
+        }
+    }
+
     public static void registerCommands(JDA jda) {
         jda.updateCommands().addCommands(
             Commands.slash("who", "Look up a player in the guild or on the server")
@@ -34,13 +121,21 @@ public final class SlashCommandHandler {
 
             Commands.slash("gmotd", "Show the guild message of the day"),
             
-            Commands.slash("ignore", "[Bot Owner Only] Ignore a player's messages in WoW chat")
+            Commands.slash("ignore", "[Permissions Needed] Ignore a player's messages in WoW chat")
                 .addOption(OptionType.STRING, "player", "Player name to ignore", true),
             
-            Commands.slash("unignore", "[Bot Owner Only] Unignore a previously ignored player")
+            Commands.slash("unignore", "[Permissions Needed] Unignore a previously ignored player")
                 .addOption(OptionType.STRING, "player", "Player name to unignore", true),
 
             Commands.slash("ignored", "List all ignored players"),
+
+            Commands.slash("ban", "[Permissions Needed] Ban a player (silences messages + auto-kicks from guild each cycle)")
+                .addOption(OptionType.STRING, "player", "Player name to ban", true),
+
+            Commands.slash("unban", "[Permissions Needed] Remove a player from the ban list")
+                .addOption(OptionType.STRING, "player", "Player name to unban", true),
+
+            Commands.slash("banned", "List all banned players"),
 
             Commands.slash("profession", "Manage character professions")
                 .addSubcommands(
@@ -169,11 +264,11 @@ public final class SlashCommandHandler {
         event.deferReply(true).queue();
         
         // Get ignored players list (no owner check - anyone can view)
-        scala.collection.immutable.List<String> scalaList = wowchat.common.IgnoreManager.getIgnoredPlayers();
+        scala.collection.immutable.List<String> scalaList = wowchat.discord.IgnoreManager.getIgnoredPlayers();
         java.util.List<String> ignoredPlayers = scala.collection.JavaConverters.seqAsJavaList(scalaList);
         
         if (ignoredPlayers.isEmpty()) {
-            event.getHook().sendMessage("✅ No players are currently ignored.").setEphemeral(true).queue();
+            event.getHook().sendMessage("No players are currently ignored.").setEphemeral(true).queue();
             return;
         }
         
@@ -195,6 +290,35 @@ public final class SlashCommandHandler {
             .queue();
     }
     
+    /**
+     * Handle /banned command - list all banned players
+     */
+    public static void handleBannedCommand(SlashCommandInteractionEvent event) {
+        event.deferReply(true).queue();
+
+        List<String> banned = getBannedPlayers();
+
+        if (banned.isEmpty()) {
+            event.getHook().sendMessage("No players are currently banned.").setEphemeral(true).queue();
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("**Banned (").append(banned.size()).append("):**\n");
+
+        for (String name : banned) {
+            String displayName = name.substring(0, 1).toUpperCase() + name.substring(1);
+            sb.append("- **").append(displayName).append("**\n");
+        }
+
+        String content = sb.toString().trim();
+        Button postButton = Button.primary("post_banned", "Post to Channel");
+        event.getHook().sendMessage(content)
+            .addActionRow(postButton)
+            .setEphemeral(true)
+            .queue();
+    }
+
     /**
      * Handle button interactions for "Post to Channel"
      */
@@ -232,6 +356,10 @@ public final class SlashCommandHandler {
             event.getChannel().sendMessage(originalContent).queue();
             
             // Acknowledge button click
+            event.reply("Posted to channel!").setEphemeral(true).queue();
+        } else if (buttonId.equals("post_banned")) {
+            String originalContent = event.getMessage().getContentRaw();
+            event.getChannel().sendMessage(originalContent).queue();
             event.reply("Posted to channel!").setEphemeral(true).queue();
         }
     }

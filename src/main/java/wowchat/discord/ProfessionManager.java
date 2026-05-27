@@ -32,7 +32,7 @@ public final class ProfessionManager {
     ));
 
     public static final int MAX_PROFESSIONS = 2;
-    private static final String FILE = "professions.json";
+    private static final String FILE = "data/professions.json";
     private static final long STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 
     // charName (lowercased) -> sorted list of professions
@@ -42,7 +42,7 @@ public final class ProfessionManager {
     private static final Map<String, Long> lastUpdated = new LinkedHashMap<>();
 
     // Discord role IDs allowed to manage professions for any character.
-    // Loaded from profCommandRoleIds in wowchat.conf.
+    // Loaded from discord.commandRoleIds in wowchat.conf.
     private static final Set<String> commandRoleIds = new LinkedHashSet<>();
 
     static {
@@ -369,6 +369,7 @@ public final class ProfessionManager {
                 sb.append("  }");
             }
             sb.append("\n}");
+            new File("data").mkdirs();
             Files.write(Paths.get(FILE), sb.toString().getBytes("UTF-8"),
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Throwable t) {
@@ -378,18 +379,8 @@ public final class ProfessionManager {
 
     private static void loadCommandRoles() {
         try {
-            String configFile = System.getProperty("wowchat.configFile", "wowchat.conf");
-            Config config = ConfigFactory.parseFile(new File(configFile))
-                .resolve(ConfigResolveOptions.defaults().setAllowUnresolved(true));
-            
-            // Try NEW path first, fall back to OLD
-            String configPath = config.hasPath("professions.commandRoleIds")
-                ? "professions.commandRoleIds"
-                : "profCommandRoleIds";
-            
-            if (!config.hasPath(configPath)) return;
-            
-            for (String roleId : config.getStringList(configPath)) {
+            List<String> ids = ConfigHelper.getCommandRoleIds();
+            for (String roleId : ids) {
                 roleId = roleId.trim();
                 if (!roleId.isEmpty()) commandRoleIds.add(roleId);
             }
@@ -397,7 +388,7 @@ public final class ProfessionManager {
                 System.out.println("[ProfessionManager] Command roles loaded: " + commandRoleIds);
             }
         } catch (Throwable t) {
-            System.err.println("[ProfessionManager] Could not load officer roles: " + t.getMessage());
+            System.err.println("[ProfessionManager] Could not load command roles: " + t.getMessage());
         }
     }
     
