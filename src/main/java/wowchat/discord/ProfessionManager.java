@@ -385,7 +385,7 @@ public final class ProfessionManager {
                 if (!roleId.isEmpty()) commandRoleIds.add(roleId);
             }
             if (!commandRoleIds.isEmpty()) {
-                System.out.println("[ProfessionManager] Command roles loaded: " + commandRoleIds);
+                System.out.println("[Bot] Command roles loaded: " + commandRoleIds);
             }
         } catch (Throwable t) {
             System.err.println("[ProfessionManager] Could not load command roles: " + t.getMessage());

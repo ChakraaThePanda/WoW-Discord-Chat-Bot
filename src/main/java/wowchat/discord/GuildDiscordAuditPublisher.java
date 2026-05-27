@@ -32,28 +32,34 @@ import java.util.*;
  */
 public final class GuildDiscordAuditPublisher {
 
-    private static volatile String auditMessageId = null;
+    private static final java.util.concurrent.ConcurrentHashMap<Long, String> messageIdByChannel =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     private GuildDiscordAuditPublisher() {}
 
     // Called from GuildRosterPublisher.tick()
     public static void publish(TextChannel channel) {
         if (!isAuditEnabled()) return;
-        
+
+        long channelKey = channel.getIdLong();
+
         try {
             MessageEmbed embed = buildAuditEmbed(channel.getJDA());
 
-            // Try to find existing message on first run
-            if (auditMessageId == null) {
-                auditMessageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Sync Audit");
+            // Try to find existing message on first run for this channel
+            if (!messageIdByChannel.containsKey(channelKey)) {
+                String found = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Sync Audit");
+                if (found != null) messageIdByChannel.put(channelKey, found);
             }
+
+            String auditMessageId = messageIdByChannel.get(channelKey);
 
             // Post new or edit existing
             if (auditMessageId == null) {
                 try {
                     Message sent = channel.sendMessageEmbeds(embed)
                         .complete();
-                    auditMessageId = sent.getId();
+                    messageIdByChannel.put(channelKey, sent.getId());
                 } catch (Throwable t) {
                     System.err.println("[GuildAudit] Failed to send embed: " + t.getMessage());
                 }
@@ -64,12 +70,11 @@ public final class GuildDiscordAuditPublisher {
                         .complete();
                 } catch (Throwable t) {
                     System.err.println("[GuildAudit] Failed to edit embed (will retry): " + t.getMessage());
-                    auditMessageId = null;
+                    messageIdByChannel.remove(channelKey);
                 }
             }
         } catch (Throwable t) {
             System.err.println("[GuildAudit] Publish error: " + t.getMessage());
-            t.printStackTrace();
         }
     }
 

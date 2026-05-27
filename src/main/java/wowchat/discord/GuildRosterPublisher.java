@@ -47,19 +47,17 @@ import java.util.concurrent.TimeUnit;
 public final class GuildRosterPublisher {
 
     // Config
-    private static volatile long         channelId     = 0L;
+    private static volatile List<Long>   channelIds    = Collections.emptyList();
     private static volatile int          updateMinutes = 5;
     private static volatile Set<String>  ignoreLower   = Collections.emptySet();
 
-    // Runtime state - roster messages (one per page)
+    // Runtime state - roster message IDs per channel
     private static volatile boolean started = false;
-    private static final List<String> rosterMessageIds = new ArrayList<>();
+    private static final Map<Long, List<String>> rosterMessageIdsByChannel = new java.util.concurrent.ConcurrentHashMap<>();
 
     private GuildRosterPublisher() {}
 
-    public static boolean isEnabled() { return channelId > 0L; }
-    
-    public static String getChannelIdString() { return channelId > 0L ? String.valueOf(channelId) : null; }
+    public static boolean isEnabled() { return !channelIds.isEmpty(); }
     
     private static boolean isShowUnlinkedEnabled() {
         return ConfigHelper.isShowUnlinkedCharactersEnabled();
@@ -71,9 +69,9 @@ public final class GuildRosterPublisher {
 
         loadConfig();
 
-        if (channelId == 0L) return;
+        if (channelIds.isEmpty()) return;
 
-        System.out.println("[GuildRoster] Initializing. Channel ID: " + channelId
+        System.out.println("[GuildRoster] Initializing. Channel IDs: " + channelIds
             + ", update interval: " + updateMinutes + " min.");
 
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
@@ -127,12 +125,6 @@ public final class GuildRosterPublisher {
         JDA jda = GuildOnlineListPublisher.getJda();
         if (jda == null) return;
 
-        TextChannel channel = jda.getTextChannelById(channelId);
-        if (channel == null) {
-            System.err.println("[GuildRoster] Could not find text channel with ID " + channelId + ".");
-            return;
-        }
-
         Map<String, String> rosterNotes = GuildDataCache.getInstance().getOfficerNotes(true);
         if (rosterNotes == null) return;
 
@@ -152,25 +144,31 @@ public final class GuildRosterPublisher {
             }
         }
         
-        // --- Process inactivity (assigns/removes Discord roles) ---
+        // --- Process inactivity (assigns/removes Discord roles) - once per tick ---
         int inactiveCount = GuildInactivityManager.processInactivity(discordGuild, guildMembers);
 
-        // --- Build and post audit embed ---
-        GuildDiscordAuditPublisher.publish(channel);
-        
-        // Delay to avoid Discord rate limits (5 edits per 5 seconds = 1 per second)
-        // Using 2 seconds to be safe and leave room for other interactions
-        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+        // --- Publish to each configured channel ---
+        for (long cid : channelIds) {
+            TextChannel channel = jda.getTextChannelById(cid);
+            if (channel == null) {
+                System.err.println("[GuildRoster] Could not find text channel with ID " + cid + ".");
+                continue;
+            }
 
-        // --- Build and post stats embed ---
-        GuildStatsPublisher.publish(channel);
-        
-        // Delay to avoid Discord rate limits
-        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+            // --- Build and post audit embed ---
+            GuildDiscordAuditPublisher.publish(channel);
+            
+            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
 
-        // --- Build roster embed (only if enabled) ---
-        if (ConfigHelper.isRosterPanelEnabled()) {
-            postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
+            // --- Build and post stats embed ---
+            GuildStatsPublisher.publish(channel);
+            
+            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+
+            // --- Build roster embed (only if enabled) ---
+            if (ConfigHelper.isRosterPanelEnabled()) {
+                postOrEditRoster(channel, discordGuild, rosterNotes, inactiveCount);
+            }
         }
     }
 
@@ -315,7 +313,11 @@ public final class GuildRosterPublisher {
         if (currentPage.length() > 0) pages.add(currentPage.toString());
         if (pages.isEmpty()) pages.add("No guild members found.");
 
-        // Grow or shrink rosterMessageIds list to match page count
+        // Grow or shrink per-channel rosterMessageIds list to match page count
+        long channelKey = channel.getIdLong();
+        rosterMessageIdsByChannel.putIfAbsent(channelKey, new ArrayList<>());
+        List<String> rosterMessageIds = rosterMessageIdsByChannel.get(channelKey);
+
         while (rosterMessageIds.size() < pages.size()) rosterMessageIds.add(null);
         while (rosterMessageIds.size() > pages.size()) {
             // Delete extra messages that are no longer needed
@@ -472,24 +474,13 @@ public final class GuildRosterPublisher {
             // Check if guild roster is enabled using ConfigHelper
             if (!ConfigHelper.isGuildRosterEnabled()) {
                 System.out.println("[GuildRoster] Feature disabled in config");
-                channelId = 0L;
+                channelIds = Collections.emptyList();
                 updateMinutes = 5;
                 ignoreLower = Collections.emptySet();
                 return;
             }
 
-            // Channel ID using ConfigHelper
-            String channelIdStr = ConfigHelper.getGuildRosterChannelId();
-            if (channelIdStr != null) {
-                try {
-                    channelId = Long.parseLong(channelIdStr.trim());
-                } catch (NumberFormatException e) {
-                    System.err.println("[GuildRoster] Invalid channel ID: " + channelIdStr);
-                    channelId = 0L;
-                }
-            } else {
-                channelId = 0L;
-            }
+            channelIds = ConfigHelper.getGuildRosterChannelIds();
 
             updateMinutes = 5;
             try {
@@ -517,7 +508,7 @@ public final class GuildRosterPublisher {
 
         } catch (Throwable t) {
             System.err.println("[GuildRoster] Failed to load config: " + t.getMessage());
-            channelId = 0L;
+            channelIds = Collections.emptyList();
         }
     }
 }

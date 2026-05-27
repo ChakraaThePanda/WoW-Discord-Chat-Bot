@@ -30,9 +30,7 @@ object Discord {
       channel.sendMessage(chunk).queue(
         _ => (), // Success callback (do nothing)
         error => {
-          // Failure callback - log the error
           System.err.println(s"[Discord] Failed to send message to ${channel.getName}: ${error.getMessage}")
-          error.printStackTrace()
         }
       )
     }
@@ -168,6 +166,7 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
 
       discordChannels.foreach {
         case (channel, channelConfig) =>
+          try {
           val errors = mutable.ArrayBuffer.empty[String]
           val parsedResolvedTags = from.map(_ => {
             messageResolver.resolveTags(channel, parsedLinks, errors += _)
@@ -226,6 +225,10 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
               Global.game.foreach(_.sendMessageToWow(ChatEvents.CHAT_MSG_WHISPER, error, from))
               Discord.sendMessage(channel, error)
             })
+          }
+          } catch {
+            case e: Throwable =>
+              System.err.println(s"[Discord] Skipping channel ${channel.getName} due to error: ${e.getMessage}")
           }
       }
     })

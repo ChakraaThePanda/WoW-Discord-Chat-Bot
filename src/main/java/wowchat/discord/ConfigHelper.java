@@ -67,18 +67,28 @@ public final class ConfigHelper {
     }
 
     // =========================================================================
-    // GUILD ROSTER CHANNEL - channelId
+    // GUILD ROSTER CHANNELS - channelIds
     // =========================================================================
 
-    public static String getGuildRosterChannelId() {
+    public static List<Long> getGuildRosterChannelIds() {
         try {
             Config config = getConfig();
-            if (config.hasPath("guildDiscordLinking.guildRoster.channelId")) {
-                return config.getString("guildDiscordLinking.guildRoster.channelId");
+            // Support both channelIds (list) and channelId (single, legacy)
+            if (config.hasPath("guildDiscordLinking.guildRoster.channelIds")) {
+                List<Long> ids = new java.util.ArrayList<>();
+                for (String s : config.getStringList("guildDiscordLinking.guildRoster.channelIds")) {
+                    try { ids.add(Long.parseLong(s.trim())); } catch (NumberFormatException ignored) {}
+                }
+                return ids;
+            } else if (config.hasPath("guildDiscordLinking.guildRoster.channelId")) {
+                try {
+                    return Collections.singletonList(
+                        Long.parseLong(config.getString("guildDiscordLinking.guildRoster.channelId").trim()));
+                } catch (NumberFormatException ignored) {}
             }
-            return null;
+            return Collections.emptyList();
         } catch (Throwable t) {
-            return null;
+            return Collections.emptyList();
         }
     }
 

@@ -21,28 +21,34 @@ import java.util.*;
  */
 public final class GuildStatsPublisher {
 
-    private static volatile String messageId = null;
+    private static final java.util.concurrent.ConcurrentHashMap<Long, String> messageIdByChannel =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     private GuildStatsPublisher() {}
 
     // Called from GuildRosterPublisher.tick() - posts stats between Audit and Roster
     public static void publish(TextChannel channel) {
         if (!isStatsEnabled()) return;
-        
+
+        long channelKey = channel.getIdLong();
+
         try {
             MessageEmbed embed = buildStatsEmbed();
 
-            // Try to find existing message on first run
-            if (messageId == null) {
-                messageId = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Statistics");
+            // Try to find existing message on first run for this channel
+            if (!messageIdByChannel.containsKey(channelKey)) {
+                String found = GuildEmbedUtil.findEmbedByTitleAndFooter(channel, "Guild Statistics");
+                if (found != null) messageIdByChannel.put(channelKey, found);
             }
+
+            String messageId = messageIdByChannel.get(channelKey);
 
             // Post new or edit existing
             if (messageId == null) {
                 try {
                     net.dv8tion.jda.api.entities.Message sent = channel.sendMessageEmbeds(embed)
                         .complete();
-                    messageId = sent.getId();
+                    messageIdByChannel.put(channelKey, sent.getId());
                 } catch (Throwable t) {
                     System.err.println("[GuildStats] Failed to send embed: " + t.getMessage());
                 }
@@ -53,7 +59,7 @@ public final class GuildStatsPublisher {
                         .complete();
                 } catch (Throwable t) {
                     System.err.println("[GuildStats] Failed to edit embed (will retry): " + t.getMessage());
-                    messageId = null;
+                    messageIdByChannel.remove(channelKey);
                 }
             }
         } catch (Throwable t) {
