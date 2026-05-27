@@ -51,7 +51,7 @@ If activated, this module allows you to link your characters in-game to your Dis
 ![Discord Link Explanation](assets/images/discord-link.png)
 
 ### Adding Professions to your Characters
-Following the Discord Link, you can use the bot's slash commands to add your professions to your characters to show up in ⁠guild-roster.
+After having successfully linked your characters, you can use the bot's slash commands to add your professions to your characters to show up in ⁠guild-roster.
 
 Using ``/professions list`` will show every character with the selected professions and their skill rank if you are looking for someone to help.
 ![Professions Explanation](assets/images/professions.gif)
