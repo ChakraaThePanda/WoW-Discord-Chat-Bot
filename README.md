@@ -11,7 +11,7 @@ If you have any questions, add me on Discord: **Chakraa**
 * Guild Online List — auto-updating Discord embed showing online members with level, race, class and zone, including Discord mention if linked
 * Guild Roster — auto-updating Discord embed showing all guild members grouped by Discord account with level, race and class per character
 * Guild Sync Audit — auto-updating Discord embed showing Discord members without a linked WoW character, grouped by role
-* Guild Role Sync — automatically assigns Discord roles based on in-game guild rank via officer notes
+* Guild Role Sync — automatically assigns Discord roles based on in-game guild rank via public/officer notes
 * Whisper Invite — players whisper the bot a trigger word and automatically receive a guild invite in-game
 * DM Auto-Reply — bot replies to anyone who DMs it with a configurable message
 * Bot Status Rotation — cycles through custom Discord status messages with {online-members} token
@@ -46,7 +46,7 @@ If activated, this module allows you to link your characters in-game to your Dis
 ### How to Link your Discord ID to your Characters
 1. Enable Developer Mode in Discord: User Settings → Advanced → Developer Mode
 2. Right-click your username anywhere in Discord and click **Copy User ID**
-3. Log into WoW, open the Guild panel, find your character, and paste your User ID into your **Officer Note**
+3. Log into WoW, open the Guild panel, find your character, and paste your User ID in either your **Public or Officer Note** (depends on bot config)
 4. The bot syncs automatically
 ![Discord Link Explanation](assets/images/discord-link.png)
 
