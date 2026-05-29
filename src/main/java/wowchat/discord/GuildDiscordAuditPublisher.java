@@ -84,83 +84,102 @@ public final class GuildDiscordAuditPublisher {
 
     private static MessageEmbed buildAuditEmbed(net.dv8tion.jda.api.JDA jda) {
         Collection<GuildMember> members = GuildDataCache.getInstance().getMembers(false);
-        
+
         List<Guild> guilds = jda.getGuilds();
         if (guilds.isEmpty()) return buildEmptyEmbed();
         Guild discordGuild = guilds.get(0);
 
-        // Build set of all linked Discord IDs using DiscordIdExtractor
+        Map<Integer, String> guildRanks = getRankNames();
+
+        // Build set of all linked Discord IDs
         Set<String> linkedDiscordIds = new HashSet<>();
         for (GuildMember member : members) {
             String id = DiscordIdExtractor.extractDiscordId(member);
             if (id != null) linkedDiscordIds.add(id);
         }
 
-        // --- Panel: Discord members missing WoW link, grouped by role ---
-        StringBuilder panel = new StringBuilder();
-        List<String> auditRoleIds = getAuditRoleIds();
-        
-        for (String roleId : auditRoleIds) {
-            Role role = discordGuild.getRoleById(roleId);
-            if (role == null) continue;
-
-            List<Member> membersWithRole = discordGuild.getMembersWithRoles(role);
-            List<String> unlinkedDiscord = new ArrayList<>();
-            for (Member member : membersWithRole) {
-                if (member.getUser().isBot()) continue;
-                if (!linkedDiscordIds.contains(member.getUser().getId())) {
-                    unlinkedDiscord.add(member.getEffectiveName());
-                }
-            }
-            Collections.sort(unlinkedDiscord, String.CASE_INSENSITIVE_ORDER);
-
-            if (panel.length() > 0) panel.append("\n");
-            panel.append("**").append(role.getName()).append("**");
-            if (unlinkedDiscord.isEmpty()) {
-                panel.append("\nAll linked.");
-            } else {
-                for (String name : unlinkedDiscord) {
-                    panel.append("\n- ").append(name);
-                }
-            }
-        }
-        
-        // --- Linked Wrong Rank Panel ---
-        StringBuilder linkedWrongRankPanel = buildLinkedWrongRankPanel(members, discordGuild);
-        String rankToCheck = getLinkedRankToCheck();
-        
-        // --- Rank Mismatch Panel ---
-        StringBuilder rankMismatchPanel = buildRankMismatchPanel(members, discordGuild);
-
-        // --- Build embed description ---
         StringBuilder auditDesc = new StringBuilder();
-        
-        // Panel 1: Discord members not linked
-        auditDesc.append("### Discord Members that aren't linked to any characters in the Guild\n");
-        if (auditRoleIds.isEmpty()) {
-            auditDesc.append("No audit roles configured (guildAuditRoleIds).");
-        } else if (panel.length() == 0) {
-            auditDesc.append("None of the configured roles were found in this Discord server.");
-        } else {
-            auditDesc.append(panel);
+
+        // --- Panel 1: Unlinked Discord members ---
+        if (ConfigHelper.isAuditUnlinkedEnabled()) {
+            auditDesc.append("### Discord Members Not Linked to Any Guild Character\n");
+            List<String> auditRoleIds = getAuditRoleIds();
+            if (auditRoleIds.isEmpty()) {
+                auditDesc.append("No roles configured (`audit.unlinked.roleIds`).");
+            } else {
+                StringBuilder panel = new StringBuilder();
+                for (String roleId : auditRoleIds) {
+                    Role role = discordGuild.getRoleById(roleId);
+                    if (role == null) continue;
+                    List<Member> membersWithRole = discordGuild.getMembersWithRoles(role);
+                    List<String> unlinked = new ArrayList<>();
+                    for (Member member : membersWithRole) {
+                        if (member.getUser().isBot()) continue;
+                        if (!linkedDiscordIds.contains(member.getUser().getId())) {
+                            unlinked.add(member.getEffectiveName());
+                        }
+                    }
+                    Collections.sort(unlinked, String.CASE_INSENSITIVE_ORDER);
+                    if (panel.length() > 0) panel.append("\n");
+                    panel.append("**").append(role.getName()).append("**");
+                    if (unlinked.isEmpty()) {
+                        panel.append("\nAll linked.");
+                    } else {
+                        for (String name : unlinked) panel.append("\n- ").append(name);
+                    }
+                }
+                if (panel.length() == 0) {
+                    auditDesc.append("None of the configured roles were found in this server.");
+                } else {
+                    auditDesc.append(panel);
+                }
+            }
         }
-        
-        // Panel 2: Linked characters with wrong rank (if configured)
-        if (rankToCheck != null) {
-            auditDesc.append("\n### ").append(rankToCheck).append(" Rank with Discord Link (Should be Promoted)\n");
-            if (linkedWrongRankPanel.length() == 0) {
+
+        // --- Panel 2: Linked rank promotion (multiple ranks) ---
+        if (ConfigHelper.isAuditLinkedRankPromotionEnabled()) {
+            List<String> ranksToCheck = ConfigHelper.getAuditLinkedRanksToCheck();
+            if (!ranksToCheck.isEmpty()) {
+                for (String rankToCheck : ranksToCheck) {
+                    if (rankToCheck == null || rankToCheck.trim().isEmpty()) continue;
+                    StringBuilder panel = buildLinkedWrongRankPanel(members, discordGuild, guildRanks, rankToCheck.trim());
+                    if (auditDesc.length() > 0) auditDesc.append("\n");
+                    auditDesc.append("### **").append(rankToCheck.trim()).append("** — Linked & Ready for Promotion\n");
+                    if (panel.length() == 0) {
+                        auditDesc.append("None.");
+                    } else {
+                        auditDesc.append(panel);
+                    }
+                }
+            }
+        }
+
+        // --- Panel 3: Rank mismatch ---
+        if (ConfigHelper.isAuditRankMismatchEnabled()) {
+            StringBuilder panel = buildRankMismatchPanel(members, discordGuild, guildRanks);
+            if (auditDesc.length() > 0) auditDesc.append("\n");
+            auditDesc.append("### Guild Rank Mismatch\n");
+            if (panel.length() == 0) {
                 auditDesc.append("None.");
             } else {
-                auditDesc.append(linkedWrongRankPanel);
+                auditDesc.append(panel);
             }
         }
-        
-        // Panel 3: Rank mismatch
-        auditDesc.append("\n### Guild Rank Mismatch\n");
-        if (rankMismatchPanel.length() == 0) {
-            auditDesc.append("None.");
-        } else {
-            auditDesc.append(rankMismatchPanel);
+
+        // --- Panel 4: Promotion due ---
+        if (ConfigHelper.isAuditPromotionDueEnabled()) {
+            StringBuilder panel = buildPromotionDuePanel(members, guildRanks);
+            if (auditDesc.length() > 0) auditDesc.append("\n");
+            auditDesc.append("### Promotion Due\n");
+            if (panel.length() == 0) {
+                auditDesc.append("None.");
+            } else {
+                auditDesc.append(panel);
+            }
+        }
+
+        if (auditDesc.length() == 0) {
+            auditDesc.append("All audit sub-modules are disabled.");
         }
 
         String auditDescStr = auditDesc.toString();
@@ -186,15 +205,12 @@ public final class GuildDiscordAuditPublisher {
     // Rank Mismatch
     // -------------------------------------------------------------------------
     
-    private static StringBuilder buildLinkedWrongRankPanel(Collection<GuildMember> members, Guild discordGuild) {
+    private static StringBuilder buildLinkedWrongRankPanel(
+            Collection<GuildMember> members, Guild discordGuild,
+            Map<Integer, String> guildRanks, String rankToCheck) {
         StringBuilder panel = new StringBuilder();
-        
-        String rankToCheck = getLinkedRankToCheck();
-        if (rankToCheck == null) return panel; // Feature disabled if not configured
-        
+        if (guildRanks.isEmpty()) return panel;
         try {
-            Map<Integer, String> guildRanks = getRankNames();
-            if (guildRanks.isEmpty()) return panel;
             
             // Find the rank index for the rank we're checking
             Integer targetRankIndex = null;
@@ -250,12 +266,11 @@ public final class GuildDiscordAuditPublisher {
         }
     }
     
-    private static StringBuilder buildRankMismatchPanel(Collection<GuildMember> members, Guild discordGuild) {
+    private static StringBuilder buildRankMismatchPanel(Collection<GuildMember> members, Guild discordGuild,
+            Map<Integer, String> guildRanks) {
         StringBuilder panel = new StringBuilder();
-        
+
         try {
-            Map<Integer, String> guildRanks = getRankNames();
-            
             // Group characters by Discord ID
             Map<String, List<CharRankInfo>> charsByDiscordId = new LinkedHashMap<>();
             
@@ -371,6 +386,50 @@ public final class GuildDiscordAuditPublisher {
         }
     }
     
+    private static StringBuilder buildPromotionDuePanel(Collection<GuildMember> members, Map<Integer, String> guildRanks) {
+        StringBuilder panel = new StringBuilder();
+        try {
+            List<? extends com.typesafe.config.Config> rankConfigs = ConfigHelper.getAuditPromotionDueRanks();
+            if (rankConfigs.isEmpty()) return panel;
+
+            for (com.typesafe.config.Config rankConfig : rankConfigs) {
+                String rankName = rankConfig.getString("rank").trim();
+                int daysRequired = rankConfig.getInt("daysRequired");
+
+                Integer targetRankIndex = null;
+                for (Map.Entry<Integer, String> entry : guildRanks.entrySet()) {
+                    if (entry.getValue().equalsIgnoreCase(rankName)) {
+                        targetRankIndex = entry.getKey();
+                        break;
+                    }
+                }
+                if (targetRankIndex == null) continue;
+
+                List<String> flagged = new ArrayList<>();
+                for (GuildMember member : members) {
+                    if (member.rankIndex() != targetRankIndex) continue;
+                    long days = GuildRankTracker.getDaysSinceRankAssigned(member.name(), targetRankIndex);
+                    if (days >= daysRequired) {
+                        String entry = member.name() + " (" + days + "d)";
+                        String discordId = DiscordIdExtractor.extractDiscordId(member);
+                        if (discordId != null) entry += " (<@" + discordId + ">)";
+                        flagged.add(entry);
+                    }
+                }
+                Collections.sort(flagged, String.CASE_INSENSITIVE_ORDER);
+
+                if (!flagged.isEmpty()) {
+                    if (panel.length() > 0) panel.append("\n");
+                    panel.append("**").append(rankName).append("** (").append(daysRequired).append("+ days)\n");
+                    for (String entry : flagged) panel.append("- ").append(entry).append("\n");
+                }
+            }
+        } catch (Throwable t) {
+            System.err.println("[GuildAudit] Error building promotion due panel: " + t.getMessage());
+        }
+        return panel;
+    }
+
     private static Map<Integer, String> getRankNames() {
         Map<Integer, String> ranks = new LinkedHashMap<>();
         try {
@@ -440,13 +499,4 @@ public final class GuildDiscordAuditPublisher {
         return ConfigHelper.getAuditRoleIds();
     }
     
-    private static String getLinkedRankToCheck() {
-        String rankToCheck = ConfigHelper.getAuditLinkedRankToCheck();
-        
-        // Return null if empty or blank (disables the feature)
-        if (rankToCheck != null && rankToCheck.trim().isEmpty()) {
-            return null;
-        }
-        return rankToCheck;
-    }
 }

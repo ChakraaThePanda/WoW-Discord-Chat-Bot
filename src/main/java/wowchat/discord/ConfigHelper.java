@@ -93,7 +93,7 @@ public final class ConfigHelper {
     }
 
     // =========================================================================
-    // AUDIT PANEL
+    // AUDIT PANEL - top-level enable
     // =========================================================================
 
     public static boolean isAuditEnabled() {
@@ -102,17 +102,33 @@ public final class ConfigHelper {
             if (config.hasPath("guildDiscordLinking.guildRoster.audit.enabled")) {
                 return config.getBoolean("guildDiscordLinking.guildRoster.audit.enabled");
             }
-            return false; // Default disabled
+            return false;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    // =========================================================================
+    // AUDIT SUB-MODULE: Unlinked Members
+    // =========================================================================
+
+    public static boolean isAuditUnlinkedEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.unlinked.enabled")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.unlinked.enabled");
+            }
+            return true; // default on when parent audit is enabled
+        } catch (Throwable t) {
+            return true;
         }
     }
 
     public static List<String> getAuditRoleIds() {
         try {
             Config config = getConfig();
-            if (config.hasPath("guildDiscordLinking.guildRoster.audit.roleIds")) {
-                return config.getStringList("guildDiscordLinking.guildRoster.audit.roleIds");
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.unlinked.roleIds")) {
+                return config.getStringList("guildDiscordLinking.guildRoster.audit.unlinked.roleIds");
             }
             return Collections.emptyList();
         } catch (Throwable t) {
@@ -120,15 +136,79 @@ public final class ConfigHelper {
         }
     }
 
-    public static String getAuditLinkedRankToCheck() {
+    // =========================================================================
+    // AUDIT SUB-MODULE: Linked Rank Promotion
+    // =========================================================================
+
+    public static boolean isAuditLinkedRankPromotionEnabled() {
         try {
             Config config = getConfig();
-            if (config.hasPath("guildDiscordLinking.guildRoster.audit.linkedRankToCheck")) {
-                return config.getString("guildDiscordLinking.guildRoster.audit.linkedRankToCheck");
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.linkedRankPromotion.enabled")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.linkedRankPromotion.enabled");
             }
-            return "";
+            return true;
         } catch (Throwable t) {
-            return "";
+            return true;
+        }
+    }
+
+    public static List<String> getAuditLinkedRanksToCheck() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.linkedRankPromotion.ranksToCheck")) {
+                return config.getStringList("guildDiscordLinking.guildRoster.audit.linkedRankPromotion.ranksToCheck");
+            }
+            return Collections.emptyList();
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
+
+    // =========================================================================
+    // AUDIT SUB-MODULE: Rank Mismatch
+    // =========================================================================
+
+    public static boolean isAuditRankMismatchEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.rankMismatch.enabled")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.rankMismatch.enabled");
+            }
+            return true;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    // =========================================================================
+    // AUDIT SUB-MODULE: Promotion Due
+    // =========================================================================
+
+    public static boolean isAuditPromotionDueEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.promotionDue.enabled")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.promotionDue.enabled");
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns the list of rank-check configs for the promotionDue sub-module.
+     * Each Config object has keys: rank (String) and daysRequired (Int).
+     */
+    public static List<? extends com.typesafe.config.Config> getAuditPromotionDueRanks() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.promotionDue.ranks")) {
+                return config.getConfigList("guildDiscordLinking.guildRoster.audit.promotionDue.ranks");
+            }
+            return Collections.emptyList();
+        } catch (Throwable t) {
+            return Collections.emptyList();
         }
     }
 

@@ -121,7 +121,10 @@ public final class GuildRosterPublisher {
             currentMemberNamesLower.add(m.name().toLowerCase());
         }
         ProfessionManager.cleanupStaleEntries(currentMemberNamesLower);
-        
+
+        // Update rank history for the promotionDue audit sub-module
+        GuildRankTracker.update(currentMembers);
+
         JDA jda = GuildOnlineListPublisher.getJda();
         if (jda == null) return;
 
