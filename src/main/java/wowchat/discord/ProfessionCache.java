@@ -33,7 +33,7 @@ public final class ProfessionCache {
                     pendingTimestamps.remove(guid);
                     if (name != null) {
                         System.out.println("[ProfessionCache] WARNING: No response for " + name
-                            + " (guid=" + guid + ") after 15s — server may be ignoring CMSG_INSPECT");
+                            + " (guid=" + guid + ") after 15s - server may be ignoring CMSG_INSPECT");
                     }
                 }
             });

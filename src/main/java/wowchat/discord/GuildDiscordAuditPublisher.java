@@ -144,7 +144,7 @@ public final class GuildDiscordAuditPublisher {
                     if (rankToCheck == null || rankToCheck.trim().isEmpty()) continue;
                     StringBuilder panel = buildLinkedWrongRankPanel(members, discordGuild, guildRanks, rankToCheck.trim());
                     if (auditDesc.length() > 0) auditDesc.append("\n");
-                    auditDesc.append("### **").append(rankToCheck.trim()).append("** — Linked & Ready for Promotion\n");
+                    auditDesc.append("### **").append(rankToCheck.trim()).append("** - Linked & Ready for Promotion\n");
                     if (panel.length() == 0) {
                         auditDesc.append("None.");
                     } else {
