@@ -92,7 +92,6 @@ public final class GuildRankTracker {
                 long since = Long.parseLong(m.group(3));
                 history.put(key, new RankRecord(rank, since));
             }
-            System.out.println("[GuildRankTracker] Loaded " + history.size() + " rank history entries.");
         } catch (Throwable t) {
             System.err.println("[GuildRankTracker] Failed to load rank history: " + t.getMessage());
         }

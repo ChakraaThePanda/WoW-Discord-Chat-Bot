@@ -59,14 +59,13 @@ public final class GuildDataCache {
             Map<String, GuildMember> newMembers = new LinkedHashMap<>();
             Map<String, String> newNotes = new LinkedHashMap<>();
             
+            String noteLocation = ConfigHelper.getDiscordLinkingNoteLocation();
             scala.collection.Iterator<GuildMember> it = rawRoster.valuesIterator();
             while (it.hasNext()) {
                 GuildMember m = it.next();
                 String name = m.name();
                 newMembers.put(name, m);
 
-                // Respect configured note location (officer or public)
-                String noteLocation = ConfigHelper.getDiscordLinkingNoteLocation();
                 String note;
                 if ("public".equals(noteLocation)) {
                     note = m.publicNote() != null ? m.publicNote().trim() : "";
