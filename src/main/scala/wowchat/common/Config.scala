@@ -11,11 +11,12 @@ import wowchat.game.GamePackets
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.{TypeTag, typeOf}
 
-case class WowChatConfig(discord: DiscordConfig, wow: Wow, guildConfig: GuildConfig, channels: Seq[ChannelConfig], filters: Option[FiltersConfig])
+case class WowChatConfig(discord: DiscordConfig, wow: Wow, guildConfig: GuildConfig, guildEnforcement: GuildEnforcementConfig, channels: Seq[ChannelConfig], filters: Option[FiltersConfig])
 case class DiscordConfig(token: String, enableDotCommands: Boolean, dotCommandsWhitelist: Set[String], enableCommandsChannels: Set[String], enableTagFailedNotifications: Boolean, itemDatabase: Option[String])
 case class Wow(locale: String, platform: Platform.Value, realmBuild: Option[Int], gameBuild: Option[Int], realmlist: RealmListConfig, account: Array[Byte], password: String, character: String, enableServerMotd: Boolean)
 case class RealmListConfig(name: String, host: String, port: Int)
 case class GuildConfig(notificationConfigs: Map[String, GuildNotificationConfig])
+case class GuildEnforcementConfig(bannedClasses: Seq[String] = Seq.empty)
 case class GuildNotificationConfig(enabled: Boolean, format: String, channel: Option[String])
 case class ChannelConfig(chatDirection: ChatDirection, wow: WowChannelConfig, discord: DiscordChannelConfig)
 case class WowChannelConfig(id: Option[Int], tp: Byte, channel: Option[String] = None, format: String, filters: Option[FiltersConfig], showDiscordUsername: Boolean = true)
@@ -38,6 +39,7 @@ object WowChatConfig extends GamePackets {
     val discordConf = config.getConfig("discord")
     val wowConf = config.getConfig("wow")
     val guildConf = getConfigOpt(config, "guild")
+    val guildEnforcementConf = getConfigOpt(config, "guildEnforcement")
     val channelsConf = config.getConfig("chat")
     val filtersConf = getConfigOpt(config, "filters")
 
@@ -68,6 +70,7 @@ object WowChatConfig extends GamePackets {
         getOpt[Boolean](wowConf, "enable_server_motd").getOrElse(true)
       ),
       parseGuildConfig(guildConf),
+      parseGuildEnforcementConfig(guildEnforcementConf),
       parseChannels(channelsConf),
       parseFilters(filtersConf)
     )
@@ -160,6 +163,24 @@ object WowChatConfig extends GamePackets {
           .toMap
       )
     })
+  }
+
+  private def parseGuildEnforcementConfig(conf: Option[Config]): GuildEnforcementConfig = {
+    val knownClasses = Set("warrior", "paladin", "hunter", "rogue", "priest", "death knight",
+      "shaman", "mage", "warlock", "monk", "druid")
+
+    val bannedClasses = conf.fold(Seq.empty[String])(c =>
+      if (c.hasPath("banned_classes"))
+        c.getStringList("banned_classes").asScala.map(_.toLowerCase).toSeq
+      else Seq.empty[String]
+    )
+
+    bannedClasses.filterNot(knownClasses.contains).foreach { cls =>
+      println(s"[Config] WARNING: '$cls' in guildEnforcement.banned_classes is not a recognized class name and will never match. " +
+        s"Valid values: ${knownClasses.mkString(", ")}")
+    }
+
+    GuildEnforcementConfig(bannedClasses)
   }
 
   private def parseChannels(channelsConf: Config): Seq[ChannelConfig] = {

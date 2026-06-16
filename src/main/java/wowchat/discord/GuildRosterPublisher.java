@@ -106,10 +106,17 @@ public final class GuildRosterPublisher {
                 && gameOptForKick.get() instanceof wowchat.game.GamePacketHandler) {
             wowchat.game.GamePacketHandler kickHandler =
                 (wowchat.game.GamePacketHandler) gameOptForKick.get();
+            scala.collection.Seq<String> bannedClasses = Global$.MODULE$.config().guildEnforcement().bannedClasses();
             for (GuildMember member : allMembers) {
                 if (SlashCommandHandler.isBanned(member.name())) {
                     System.out.println("[BanList] Kicking banned player: " + member.name());
                     kickHandler.sendGuildKick(member.name());
+                } else if (!bannedClasses.isEmpty()) {
+                    String memberClass = getClassName(member.charClass()).toLowerCase();
+                    if (bannedClasses.contains(memberClass)) {
+                        System.out.println("[ClassBan] Kicking " + member.name() + " (" + memberClass + "): class is blacklisted.");
+                        kickHandler.sendGuildKick(member.name());
+                    }
                 }
             }
         }
