@@ -16,7 +16,7 @@ case class DiscordConfig(token: String, enableDotCommands: Boolean, dotCommandsW
 case class Wow(locale: String, platform: Platform.Value, realmBuild: Option[Int], gameBuild: Option[Int], realmlist: RealmListConfig, account: Array[Byte], password: String, character: String, enableServerMotd: Boolean)
 case class RealmListConfig(name: String, host: String, port: Int)
 case class GuildConfig(notificationConfigs: Map[String, GuildNotificationConfig])
-case class GuildEnforcementConfig(bannedClasses: Seq[String] = Seq.empty)
+case class GuildEnforcementConfig(bannedClasses: Seq[String] = Seq.empty, bannedRaces: Seq[String] = Seq.empty)
 case class GuildNotificationConfig(enabled: Boolean, format: String, channel: Option[String])
 case class ChannelConfig(chatDirection: ChatDirection, wow: WowChannelConfig, discord: DiscordChannelConfig)
 case class WowChannelConfig(id: Option[Int], tp: Byte, channel: Option[String] = None, format: String, filters: Option[FiltersConfig], showDiscordUsername: Boolean = true)
@@ -168,10 +168,18 @@ object WowChatConfig extends GamePackets {
   private def parseGuildEnforcementConfig(conf: Option[Config]): GuildEnforcementConfig = {
     val knownClasses = Set("warrior", "paladin", "hunter", "rogue", "priest", "death knight",
       "shaman", "mage", "warlock", "monk", "druid")
+    val knownRaces = Set("human", "orc", "dwarf", "night elf", "undead", "tauren", "gnome", "troll",
+      "blood elf", "draenei", "goblin", "worgen", "pandaren")
 
     val bannedClasses = conf.fold(Seq.empty[String])(c =>
       if (c.hasPath("banned_classes"))
         c.getStringList("banned_classes").asScala.map(_.toLowerCase).toSeq
+      else Seq.empty[String]
+    )
+
+    val bannedRaces = conf.fold(Seq.empty[String])(c =>
+      if (c.hasPath("banned_races"))
+        c.getStringList("banned_races").asScala.map(_.toLowerCase).toSeq
       else Seq.empty[String]
     )
 
@@ -180,7 +188,12 @@ object WowChatConfig extends GamePackets {
         s"Valid values: ${knownClasses.mkString(", ")}")
     }
 
-    GuildEnforcementConfig(bannedClasses)
+    bannedRaces.filterNot(knownRaces.contains).foreach { race =>
+      println(s"[Config] WARNING: '$race' in guildEnforcement.banned_races is not a recognized race name and will never match. " +
+        s"Valid values: ${knownRaces.mkString(", ")}")
+    }
+
+    GuildEnforcementConfig(bannedClasses, bannedRaces)
   }
 
   private def parseChannels(channelsConf: Config): Seq[ChannelConfig] = {

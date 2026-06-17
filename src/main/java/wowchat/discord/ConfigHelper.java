@@ -355,4 +355,36 @@ public final class ConfigHelper {
             return null;
         }
     }
+
+    // =========================================================================
+    // GUILD ENFORCEMENT - banned lists for stats filtering
+    // =========================================================================
+
+    public static List<String> getBannedClasses() {
+        try {
+            Config config = getConfig();
+            if (!config.hasPath("guildEnforcement.banned_classes")) return Collections.emptyList();
+            List<String> result = new java.util.ArrayList<>();
+            for (String s : config.getStringList("guildEnforcement.banned_classes")) {
+                result.add(s.toLowerCase());
+            }
+            return result;
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
+
+    public static List<String> getBannedRaces() {
+        try {
+            Config config = getConfig();
+            if (!config.hasPath("guildEnforcement.banned_races")) return Collections.emptyList();
+            List<String> result = new java.util.ArrayList<>();
+            for (String s : config.getStringList("guildEnforcement.banned_races")) {
+                result.add(s.toLowerCase());
+            }
+            return result;
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
 }
