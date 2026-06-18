@@ -37,6 +37,7 @@ public final class AutoGuildInviteHandler {
     private static volatile boolean      exact          = false;
     private static volatile boolean      whisperEnabled = false;
     private static volatile List<String> channels       = Collections.emptyList();
+    private static volatile boolean      replyOnBlock   = false;
 
     private static final java.util.concurrent.ConcurrentHashMap<Long, Boolean> pendingInvites =
         new java.util.concurrent.ConcurrentHashMap<>();
@@ -45,9 +46,53 @@ public final class AutoGuildInviteHandler {
 
     public static List<String> getChannels() { return channels; }
 
-    public static void onNameResolved(long guid, String name, GamePacketHandler handler) {
+    private static String getClassName(byte charClass) {
+        switch (charClass) {
+            case 0x01: return "warrior";
+            case 0x02: return "paladin";
+            case 0x03: return "hunter";
+            case 0x04: return "rogue";
+            case 0x05: return "priest";
+            case 0x06: return "death knight";
+            case 0x07: return "shaman";
+            case 0x08: return "mage";
+            case 0x09: return "warlock";
+            case 0x0A: return "monk";
+            case 0x0B: return "druid";
+            default:   return "";
+        }
+    }
+
+    private static boolean shouldBlock(String name, byte charClass, String race, GamePacketHandler handler) {
+        if (wowchat.discord.SlashCommandHandler.isBanned(name)) {
+            System.out.println("[AutoGuildInvite] Ignoring invite request from " + name + ": player is banned.");
+            return true;
+        }
+        scala.collection.Seq<String> bannedClasses = wowchat.common.Global$.MODULE$.config().guildEnforcement().bannedClasses();
+        if (!bannedClasses.isEmpty()) {
+            String cls = getClassName(charClass);
+            if (!cls.isEmpty() && bannedClasses.contains(cls)) {
+                System.out.println("[AutoGuildInvite] Ignoring invite request from " + name + ": class " + cls + " is blacklisted.");
+                if (replyOnBlock) handler.sendWhisper(name, "Sorry, your class is not eligible to join this guild.");
+                return true;
+            }
+        }
+        scala.collection.Seq<String> bannedRaces = wowchat.common.Global$.MODULE$.config().guildEnforcement().bannedRaces();
+        if (!bannedRaces.isEmpty()) {
+            String normalizedRace = race.trim().toLowerCase();
+            if (!normalizedRace.isEmpty() && bannedRaces.contains(normalizedRace)) {
+                System.out.println("[AutoGuildInvite] Ignoring invite request from " + name + ": race " + race.trim() + " is blacklisted.");
+                if (replyOnBlock) handler.sendWhisper(name, "Sorry, your character's race is not eligible to join this guild.");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void onNameResolved(long guid, String name, byte charClass, String race, GamePacketHandler handler) {
         if (!active) return;
         if (!pendingInvites.remove(guid, Boolean.TRUE)) return;
+        if (shouldBlock(name, charClass, race, handler)) return;
         handler.sendGuildInvite(name);
     }
 
@@ -79,6 +124,7 @@ public final class AutoGuildInviteHandler {
 
             exact          = c.hasPath("exactMatch") && c.getBoolean("exactMatch");
             whisperEnabled = !c.hasPath("whisperEnabled") || c.getBoolean("whisperEnabled");
+            replyOnBlock   = c.hasPath("replyOnBlock") && c.getBoolean("replyOnBlock");
 
             List<String> rawChannels = c.hasPath("channels")
                 ? c.getStringList("channels")
@@ -148,7 +194,10 @@ public final class AutoGuildInviteHandler {
                 handler.sendNameQuery(senderGuid);
                 return;
             }
-            handler.sendGuildInvite(playerOpt.get().name());
+            String playerName = playerOpt.get().name();
+            String playerRace = GuildOnlineListPublisher.getRace(playerName).trim();
+            if (shouldBlock(playerName, playerOpt.get().charClass(), playerRace, handler)) return;
+            handler.sendGuildInvite(playerName);
 
         } catch (Throwable t) {
             System.err.println("[AutoGuildInvite] Error handling channel message: " + t.getMessage());
@@ -195,7 +244,10 @@ public final class AutoGuildInviteHandler {
                 handler.sendNameQuery(senderGuid);
                 return;
             }
-            handler.sendGuildInvite(playerOpt.get().name());
+            String playerName = playerOpt.get().name();
+            String playerRace = GuildOnlineListPublisher.getRace(playerName).trim();
+            if (shouldBlock(playerName, playerOpt.get().charClass(), playerRace, handler)) return;
+            handler.sendGuildInvite(playerName);
 
         } catch (Throwable t) {
             System.err.println("[AutoGuildInvite] Error handling whisper: " + t.getMessage());

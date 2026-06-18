@@ -191,6 +191,10 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     sendMessageToWow(ChatEvents.CHAT_MSG_GUILD, command, None)
   }
 
+  def sendWhisper(playerName: String, message: String): Unit = {
+    sendMessageToWow(ChatEvents.CHAT_MSG_WHISPER, message, Some(playerName))
+  }
+
   def sendGuildInvite(playerName: String): Unit = {
     logger.info(s"[WhisperInvite] Sending guild invite to: $playerName")
     ctx.fold(logger.error("Cannot send guild invite! Not connected to WoW!"))(ctx => {
@@ -405,7 +409,7 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       }
 
       // Process any pending whisper invites for this guid
-      wowchat.discord.AutoGuildInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, this)
+      wowchat.discord.AutoGuildInviteHandler.onNameResolved(nameQueryMessage.guid, nameQueryMessage.name, nameQueryMessage.charClass, nameQueryMessage.race, this)
 
       queuedChatMessages
         .remove(nameQueryMessage.guid)
@@ -429,11 +433,12 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     val guid = msg.byteBuf.readLongLE
     val name = msg.readString
     msg.skipString // realm name for cross bg usage
-    msg.byteBuf.skipBytes(4) // race
+    val raceId = msg.byteBuf.readIntLE
     msg.byteBuf.skipBytes(4) // gender
     val charClass = msg.byteBuf.readIntLE.toByte
+    val raceName = GamePacketHandlerWotLK.RACE_NAMES.getOrElse(raceId, "")
 
-    NameQueryMessage(guid, name, charClass)
+    NameQueryMessage(guid, name, charClass, raceName)
   }
 
   private def handle_SMSG_CHAR_ENUM(msg: Packet): Unit = {
