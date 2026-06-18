@@ -15,7 +15,7 @@ If you have any questions, add me on Discord: **Chakraa**
 * Whisper Invite — players whisper the bot a trigger word and automatically receive a guild invite in-game
 * DM Auto-Reply — bot replies to anyone who DMs it with a configurable message
 * Bot Status Rotation — cycles through custom Discord status messages with {online-members} token
-* show_discord_username — per-channel option to hide Discord usernames when relaying to WoW
+* show_username_in_wow — per-channel option to hide Discord usernames when relaying to WoW
 * Watchdog — separate process monitors bot health and restarts it automatically if the WoW connection dies or Discord relay breaks silently
 * Guild Death Ping — automatically mentions a configured Discord role when a guild member dies in-game
 * and more!

@@ -36,6 +36,19 @@ object Discord {
     }
   }
 
+  def sendMessageSuppressMentions(channel: MessageChannel, message: String): Unit = {
+    splitUpByLength(message, 2000).foreach { chunk =>
+      channel.sendMessage(chunk)
+        .setAllowedMentions(java.util.Collections.emptyList())
+        .queue(
+          _ => (),
+          error => {
+            System.err.println(s"[Discord] Failed to send message to ${channel.getName}: ${error.getMessage}")
+          }
+        )
+    }
+  }
+
   private def splitUpByLength(message: String, maxLength: Int): Seq[String] = {
     val retArr = mutable.ArrayBuffer.empty[String]
 
@@ -177,10 +190,25 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
             .replace("_", "\\_")
             .replace("~", "\\~")
 
+          val (userDisplay, hasDiscordTag) = if (channelConfig.showTagInDiscord) {
+            from.map { charName =>
+              Global.game.flatMap {
+                case handler: wowchat.game.GamePacketHandler =>
+                  handler.getGuildRoster.valuesIterator
+                    .find(_.name.equalsIgnoreCase(charName))
+                    .flatMap(member => Option(DiscordIdExtractor.extractDiscordId(member)))
+                    .map(discordId => (s"<@$discordId>/$charName", true))
+                case _ => None
+              }.getOrElse((charName, false))
+            }.getOrElse(("", false))
+          } else {
+            (from.getOrElse(""), false)
+          }
+
           val formatted = channelConfig
             .format
             .replace("%time", Global.getTime)
-            .replace("%user", from.getOrElse(""))
+            .replace("%user", userDisplay)
             .replace("%message", parsedResolvedTags)
             .replace("%target", wowChannel.getOrElse(""))
 
@@ -218,7 +246,11 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
           val filter = shouldFilter(channelConfig.filters, finalMessage)
           logger.info(s"${if (filter) "FILTERED " else ""}WoW->Discord(${channel.getName}) $finalMessage")
           if (!filter) {
-            Discord.sendMessage(channel, finalMessage)
+            if (hasDiscordTag) {
+              Discord.sendMessageSuppressMentions(channel, finalMessage)
+            } else {
+              Discord.sendMessage(channel, finalMessage)
+            }
           }
           if (Global.config.discord.enableTagFailedNotifications) {
             errors.foreach(error => {
@@ -518,7 +550,7 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
         .foreach(_.foreach(channelConfig => {
           val finalMessages = if (shouldSendDirectly(message)) {
             Seq(message)
-          } else if (channelConfig.showDiscordUsername) {
+          } else if (channelConfig.showUsernameInWow) {
             Discord.splitUpMessageToWow(channelConfig.format, effectiveName, message)
           } else {
             Discord.splitUpMessageToWow("%message", "", message)

@@ -19,8 +19,8 @@ case class GuildConfig(notificationConfigs: Map[String, GuildNotificationConfig]
 case class GuildEnforcementConfig(bannedClasses: Seq[String] = Seq.empty, bannedRaces: Seq[String] = Seq.empty)
 case class GuildNotificationConfig(enabled: Boolean, format: String, channel: Option[String])
 case class ChannelConfig(chatDirection: ChatDirection, wow: WowChannelConfig, discord: DiscordChannelConfig)
-case class WowChannelConfig(id: Option[Int], tp: Byte, channel: Option[String] = None, format: String, filters: Option[FiltersConfig], showDiscordUsername: Boolean = true)
-case class DiscordChannelConfig(channel: String, format: String, filters: Option[FiltersConfig])
+case class WowChannelConfig(id: Option[Int], tp: Byte, channel: Option[String] = None, format: String, filters: Option[FiltersConfig], showUsernameInWow: Boolean = true)
+case class DiscordChannelConfig(channel: String, format: String, filters: Option[FiltersConfig], showTagInDiscord: Boolean = false)
 case class FiltersConfig(enabled: Boolean, patterns: Seq[String])
 
 object WowChatConfig extends GamePackets {
@@ -210,12 +210,13 @@ object WowChatConfig extends GamePackets {
             wowChannel,
             getOpt[String](channel, "wow.format").getOrElse(""),
             parseFilters(getConfigOpt(channel, "wow.filters")),
-            getOpt[Boolean](channel, "discord.show_discord_username").getOrElse(true)
+            getOpt[Boolean](channel, "discord.show_username_in_wow").getOrElse(true)
           ),
           DiscordChannelConfig(
             channel.getString("discord.channel"),
             channel.getString("discord.format"),
-            parseFilters(getConfigOpt(channel, "discord.filters"))
+            parseFilters(getConfigOpt(channel, "discord.filters")),
+            getOpt[Boolean](channel, "discord.show_tag_in_discord").getOrElse(false)
           )
         )
     })
