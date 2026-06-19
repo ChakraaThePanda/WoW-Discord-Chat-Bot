@@ -499,6 +499,30 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
       case "banned" =>
         wowchat.discord.SlashCommandHandler.handleBannedCommand(event)
 
+      case "promote" | "demote" =>
+        event.deferReply().setEphemeral(true).queue()
+        val guild = event.getGuild
+        val userId = event.getUser.getId
+        jda.retrieveApplicationInfo().queue(appInfo => {
+          val isOwner = userId == appInfo.getOwner.getId
+          val hasRole = guild != null && wowchat.discord.ProfessionManager.hasCommandRole(userId, guild)
+          if (!isOwner && !hasRole) {
+            event.getHook.sendMessage("❌ You don't have permission to use this command.").setEphemeral(true).queue()
+          } else {
+            val character = event.getOption("character").getAsString
+            Global.game.fold(event.getHook.sendMessage(notOnline).setEphemeral(true).queue())(g => {
+              event.getName match {
+                case "promote" =>
+                  g.sendGuildPromote(character)
+                  event.getHook.sendMessage(s"✅ Promote sent for **$character**.").setEphemeral(true).queue()
+                case "demote" =>
+                  g.sendGuildDemote(character)
+                  event.getHook.sendMessage(s"✅ Demote sent for **$character**.").setEphemeral(true).queue()
+              }
+            })
+          }
+        }, _ => event.getHook.sendMessage("❌ Failed to verify permissions.").setEphemeral(true).queue())
+
       case "profession" =>
         wowchat.discord.SlashCommandHandler.handleProfCommand(event)
     }

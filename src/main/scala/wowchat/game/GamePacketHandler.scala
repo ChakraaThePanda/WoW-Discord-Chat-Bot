@@ -215,6 +215,26 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
     })
   }
 
+  def sendGuildPromote(playerName: String): Unit = {
+    logger.info(s"[GuildRank] Promoting: $playerName")
+    ctx.fold(logger.error("Cannot send guild promote! Not connected to WoW!"))(ctx => {
+      val out = PooledByteBufAllocator.DEFAULT.buffer(64)
+      out.writeBytes(playerName.getBytes("UTF-8"))
+      out.writeByte(0)
+      ctx.writeAndFlush(Packet(CMSG_GUILD_PROMOTE, out))
+    })
+  }
+
+  def sendGuildDemote(playerName: String): Unit = {
+    logger.info(s"[GuildRank] Demoting: $playerName")
+    ctx.fold(logger.error("Cannot send guild demote! Not connected to WoW!"))(ctx => {
+      val out = PooledByteBufAllocator.DEFAULT.buffer(64)
+      out.writeBytes(playerName.getBytes("UTF-8"))
+      out.writeByte(0)
+      ctx.writeAndFlush(Packet(CMSG_GUILD_DEMOTE, out))
+    })
+  }
+
   private def handle_SMSG_GUILD_INVITE(msg: Packet): Unit = {
     // Bot received a guild invite — ignore silently
   }
@@ -222,21 +242,26 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   private def handle_SMSG_GUILD_COMMAND_RESULT(msg: Packet): Unit = {
     try {
       val command = msg.byteBuf.readIntLE()
-      // read null-terminated name string
       val nameBytes = new scala.collection.mutable.ArrayBuffer[Byte]()
       var b = msg.byteBuf.readByte()
       while (b != 0) { nameBytes += b; b = msg.byteBuf.readByte() }
       val name = new String(nameBytes.toArray, "UTF-8")
       val result = msg.byteBuf.readIntLE()
+      val tag = command match {
+        case 0x08B => "[GuildRank] Promote"
+        case 0x08C => "[GuildRank] Demote"
+        case 0x08E => "[BanList] Kick"
+        case _     => "[WhisperInvite] Invite"
+      }
       result match {
-        case 0 => logger.info(s"[WhisperInvite] Guild invite sent successfully to: $name")
-        case 2 => logger.warn(s"[WhisperInvite] Guild invite failed: $name is already in a guild")
-        case 3 => logger.warn(s"[WhisperInvite] Guild invite failed: $name is already invited")
-        case 5 => logger.warn(s"[WhisperInvite] Guild invite failed: player $name not found")
-        case r => logger.warn(s"[WhisperInvite] Guild invite result for $name: code $r")
+        case 0 => logger.info(s"$tag succeeded for: $name")
+        case 2 => logger.warn(s"$tag failed: $name is already in a guild")
+        case 3 => logger.warn(s"$tag failed: $name is already invited")
+        case 5 => logger.warn(s"$tag failed: player $name not found")
+        case r => logger.warn(s"$tag result for $name: code $r")
       }
     } catch {
-      case e: Exception => logger.warn(s"[WhisperInvite] Could not parse SMSG_GUILD_COMMAND_RESULT: ${e.getMessage}")
+      case e: Exception => logger.warn(s"[GuildCommand] Could not parse SMSG_GUILD_COMMAND_RESULT: ${e.getMessage}")
     }
   }
 
@@ -596,8 +621,9 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
       return
     }
 
-    // ignore events from self
-    if (event != GuildEvents.GE_MOTD && Global.config.wow.character.equalsIgnoreCase(messages.head)) {
+    // ignore events from self, except MOTD, promotions, and demotions (bot may act as promoter)
+    if (event != GuildEvents.GE_MOTD && event != GuildEvents.GE_PROMOTED && event != GuildEvents.GE_DEMOTED
+        && Global.config.wow.character.equalsIgnoreCase(messages.head)) {
       return
     }
 

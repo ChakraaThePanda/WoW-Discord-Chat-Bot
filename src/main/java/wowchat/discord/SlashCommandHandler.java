@@ -137,6 +137,12 @@ public final class SlashCommandHandler {
 
             Commands.slash("banned", "List all banned players"),
 
+            Commands.slash("promote", "[Permissions Needed] Promote a guild member one rank")
+                .addOption(OptionType.STRING, "character", "Character name to promote", true),
+
+            Commands.slash("demote", "[Permissions Needed] Demote a guild member one rank")
+                .addOption(OptionType.STRING, "character", "Character name to demote", true),
+
             Commands.slash("profession", "Manage character professions")
                 .addSubcommands(
                     new SubcommandData("add", "Add or update a profession for a character (with optional skill level 1-450)")

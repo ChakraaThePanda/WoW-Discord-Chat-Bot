@@ -91,7 +91,12 @@ object CommandHandler extends StrictLogging {
     
     whoResponse.map(r => {
       val owner = getDiscordOwner(r.playerName)
-      Seq(s"${r.playerName} ${if (r.guildName.nonEmpty) s"<${r.guildName}> " else ""}is a level ${r.lvl}${r.gender.fold(" ")(g => s" $g ")}${r.race} ${r.cls} currently in ${r.zone}.$owner")
+      val rankStr = if (r.guildName.nonEmpty) {
+        guildRoster.values.find(_.name.equalsIgnoreCase(r.playerName))
+          .flatMap(m => Option(guildInfo).flatMap(_.ranks.get(m.rankIndex)))
+          .fold("")(rank => s" [$rank]")
+      } else ""
+      Seq(s"${r.playerName} ${if (r.guildName.nonEmpty) s"<${r.guildName}>$rankStr " else ""}is a level ${r.lvl}${r.gender.fold(" ")(g => s" $g ")}${r.race} ${r.cls} currently in ${r.zone}.$owner")
     }).getOrElse({
       // Check guild roster
       guildRoster
@@ -107,7 +112,8 @@ object CommandHandler extends StrictLogging {
           val daysStr = if (days > 0) s" $days day${if (days != 1) "s" else ""}," else ""
 
           val guildNameStr = if (guildInfo != null) {
-            s" <${guildInfo.name}>"
+            val rank = guildInfo.ranks.get(guildMember.rankIndex).fold("")(r => s" [$r]")
+            s" <${guildInfo.name}>$rank"
           } else {
             ""
           }
