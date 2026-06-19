@@ -35,6 +35,10 @@ public final class GuildDiscordAuditPublisher {
     private static final java.util.concurrent.ConcurrentHashMap<Long, String> messageIdByChannel =
         new java.util.concurrent.ConcurrentHashMap<>();
 
+    // Tracks characters we've already sent an autopromote command for (key = "name_rankIndex").
+    // Prevents spamming promote between roster ticks before the rank change is confirmed.
+    private static final Set<String> pendingAutopromotes = new HashSet<>();
+
     private GuildDiscordAuditPublisher() {}
 
     // Called from GuildRosterPublisher.tick()
@@ -166,15 +170,34 @@ public final class GuildDiscordAuditPublisher {
             }
         }
 
-        // --- Panel 4: Promotion due ---
+        // --- Panel 4: Promotion due / Autopromote ---
         if (ConfigHelper.isAuditPromotionDueEnabled()) {
-            StringBuilder panel = buildPromotionDuePanel(members, guildRanks);
-            if (auditDesc.length() > 0) auditDesc.append("\n");
-            auditDesc.append("### Promotion Due\n");
-            if (panel.length() == 0) {
-                auditDesc.append("None.");
+            if (ConfigHelper.isAuditPromotionDueAutopromoteEnabled()) {
+                runAutopromote(members, guildRanks);
             } else {
-                auditDesc.append(panel);
+                StringBuilder panel = buildPromotionDuePanel(members, guildRanks);
+                if (auditDesc.length() > 0) auditDesc.append("\n");
+                auditDesc.append("### Promotion Due\n");
+                if (panel.length() == 0) {
+                    auditDesc.append("None.");
+                } else {
+                    auditDesc.append(panel);
+                }
+            }
+        }
+
+        // --- Panel 5: Rank list ---
+        if (ConfigHelper.isAuditRankListEnabled()) {
+            List<String> ranksToList = ConfigHelper.getAuditRankListRanks();
+            for (String rankName : ranksToList) {
+                StringBuilder panel = buildRankListPanel(members, discordGuild, guildRanks, rankName.trim());
+                if (auditDesc.length() > 0) auditDesc.append("\n");
+                auditDesc.append("### ").append(rankName.trim()).append("\n");
+                if (panel.length() == 0) {
+                    auditDesc.append("None.");
+                } else {
+                    auditDesc.append(panel);
+                }
             }
         }
 
@@ -386,6 +409,56 @@ public final class GuildDiscordAuditPublisher {
         }
     }
     
+    private static void runAutopromote(Collection<GuildMember> members, Map<Integer, String> guildRanks) {
+        try {
+            Option<GameCommandHandler> gameOpt = Global$.MODULE$.game();
+            if (gameOpt == null || gameOpt.isEmpty()) return;
+            GameCommandHandler game = gameOpt.get();
+
+            List<? extends com.typesafe.config.Config> rankConfigs = ConfigHelper.getAuditPromotionDueRanks();
+
+            // Clean up pending set: remove entries whose character is no longer at the pending rank
+            Set<String> currentKeys = new HashSet<>();
+            for (GuildMember member : members) {
+                currentKeys.add(member.name().toLowerCase() + "_" + member.rankIndex());
+            }
+            pendingAutopromotes.retainAll(currentKeys);
+
+            for (com.typesafe.config.Config rankConfig : rankConfigs) {
+                String rankName = rankConfig.getString("rank").trim();
+                int daysRequired  = rankConfig.hasPath("daysRequired")  ? rankConfig.getInt("daysRequired")  : 0;
+                int hoursRequired = rankConfig.hasPath("hoursRequired") ? rankConfig.getInt("hoursRequired") : 0;
+                long totalHoursRequired = (long) daysRequired * 24 + hoursRequired;
+                if (totalHoursRequired <= 0) continue;
+
+                Integer targetRankIndex = null;
+                for (Map.Entry<Integer, String> entry : guildRanks.entrySet()) {
+                    if (entry.getValue().equalsIgnoreCase(rankName)) {
+                        targetRankIndex = entry.getKey();
+                        break;
+                    }
+                }
+                if (targetRankIndex == null) continue;
+
+                for (GuildMember member : members) {
+                    if (member.rankIndex() != targetRankIndex) continue;
+                    long hours = GuildRankTracker.getHoursSinceRankAssigned(member.name(), targetRankIndex);
+                    if (hours < totalHoursRequired) continue;
+
+                    String key = member.name().toLowerCase() + "_" + targetRankIndex;
+                    if (pendingAutopromotes.contains(key)) continue;
+
+                    System.out.println("[AutoPromote] Promoting " + member.name()
+                        + " from " + rankName + " (" + formatHours(hours) + " at rank)");
+                    game.sendGuildPromote(member.name());
+                    pendingAutopromotes.add(key);
+                }
+            }
+        } catch (Throwable t) {
+            System.err.println("[AutoPromote] Error: " + t.getMessage());
+        }
+    }
+
     private static StringBuilder buildPromotionDuePanel(Collection<GuildMember> members, Map<Integer, String> guildRanks) {
         StringBuilder panel = new StringBuilder();
         try {
@@ -394,7 +467,10 @@ public final class GuildDiscordAuditPublisher {
 
             for (com.typesafe.config.Config rankConfig : rankConfigs) {
                 String rankName = rankConfig.getString("rank").trim();
-                int daysRequired = rankConfig.getInt("daysRequired");
+                int daysRequired  = rankConfig.hasPath("daysRequired")  ? rankConfig.getInt("daysRequired")  : 0;
+                int hoursRequired = rankConfig.hasPath("hoursRequired") ? rankConfig.getInt("hoursRequired") : 0;
+                long totalHoursRequired = (long) daysRequired * 24 + hoursRequired;
+                if (totalHoursRequired <= 0) continue;
 
                 Integer targetRankIndex = null;
                 for (Map.Entry<Integer, String> entry : guildRanks.entrySet()) {
@@ -408,9 +484,9 @@ public final class GuildDiscordAuditPublisher {
                 List<String> flagged = new ArrayList<>();
                 for (GuildMember member : members) {
                     if (member.rankIndex() != targetRankIndex) continue;
-                    long days = GuildRankTracker.getDaysSinceRankAssigned(member.name(), targetRankIndex);
-                    if (days >= daysRequired) {
-                        String entry = member.name() + " (" + days + "d)";
+                    long hours = GuildRankTracker.getHoursSinceRankAssigned(member.name(), targetRankIndex);
+                    if (hours >= totalHoursRequired) {
+                        String entry = member.name() + " (" + formatHours(hours) + ")";
                         String discordId = DiscordIdExtractor.extractDiscordId(member);
                         if (discordId != null) entry += " (<@" + discordId + ">)";
                         flagged.add(entry);
@@ -420,7 +496,7 @@ public final class GuildDiscordAuditPublisher {
 
                 if (!flagged.isEmpty()) {
                     if (panel.length() > 0) panel.append("\n");
-                    panel.append("**").append(rankName).append("** (").append(daysRequired).append("+ days)\n");
+                    panel.append("**").append(rankName).append("** (").append(formatHoursThreshold(totalHoursRequired)).append(")\n");
                     for (String entry : flagged) panel.append("- ").append(entry).append("\n");
                 }
             }
@@ -428,6 +504,53 @@ public final class GuildDiscordAuditPublisher {
             System.err.println("[GuildAudit] Error building promotion due panel: " + t.getMessage());
         }
         return panel;
+    }
+
+    private static StringBuilder buildRankListPanel(
+            Collection<GuildMember> members, Guild discordGuild,
+            Map<Integer, String> guildRanks, String rankName) {
+        StringBuilder panel = new StringBuilder();
+        try {
+            Integer targetRankIndex = null;
+            for (Map.Entry<Integer, String> entry : guildRanks.entrySet()) {
+                if (entry.getValue().equalsIgnoreCase(rankName)) {
+                    targetRankIndex = entry.getKey();
+                    break;
+                }
+            }
+            if (targetRankIndex == null) return panel;
+
+            List<String> lines = new ArrayList<>();
+            for (GuildMember member : members) {
+                if (member.rankIndex() != targetRankIndex) continue;
+                String discordId = DiscordIdExtractor.extractDiscordId(member);
+                String line = "- " + member.name();
+                if (discordId != null) line += " (<@" + discordId + ">)";
+                lines.add(line);
+            }
+
+            Collections.sort(lines, String.CASE_INSENSITIVE_ORDER);
+            for (String line : lines) panel.append(line).append("\n");
+        } catch (Throwable t) {
+            System.err.println("[GuildAudit] Error building rank list panel: " + t.getMessage());
+        }
+        return panel;
+    }
+
+    /** Formats an elapsed hour count as "Xd Yh", "Xd", or "Yh". */
+    private static String formatHours(long hours) {
+        if (hours < 24) return hours + "h";
+        long d = hours / 24;
+        long h = hours % 24;
+        return h == 0 ? d + "d" : d + "d " + h + "h";
+    }
+
+    /** Formats a required hour count as a threshold label like "7d+", "7d 12h+", or "48h+". */
+    private static String formatHoursThreshold(long totalHours) {
+        if (totalHours < 24) return totalHours + "h+";
+        long d = totalHours / 24;
+        long h = totalHours % 24;
+        return h == 0 ? d + "d+" : d + "d " + h + "h+";
     }
 
     private static Map<Integer, String> getRankNames() {

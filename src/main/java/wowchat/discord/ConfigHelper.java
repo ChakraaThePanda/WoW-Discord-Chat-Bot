@@ -196,15 +196,56 @@ public final class ConfigHelper {
         }
     }
 
+    public static boolean isAuditPromotionDueAutopromoteEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.promotionDue.autopromote")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.promotionDue.autopromote");
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /**
      * Returns the list of rank-check configs for the promotionDue sub-module.
-     * Each Config object has keys: rank (String) and daysRequired (Int).
+     * Each Config object has keys: rank (String), daysRequired (Int, optional),
+     * and hoursRequired (Int, optional). Total threshold = daysRequired*24 + hoursRequired.
      */
     public static List<? extends com.typesafe.config.Config> getAuditPromotionDueRanks() {
         try {
             Config config = getConfig();
             if (config.hasPath("guildDiscordLinking.guildRoster.audit.promotionDue.ranks")) {
                 return config.getConfigList("guildDiscordLinking.guildRoster.audit.promotionDue.ranks");
+            }
+            return Collections.emptyList();
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
+
+    // =========================================================================
+    // AUDIT SUB-MODULE: Rank List
+    // =========================================================================
+
+    public static boolean isAuditRankListEnabled() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.rankList.enabled")) {
+                return config.getBoolean("guildDiscordLinking.guildRoster.audit.rankList.enabled");
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    public static List<String> getAuditRankListRanks() {
+        try {
+            Config config = getConfig();
+            if (config.hasPath("guildDiscordLinking.guildRoster.audit.rankList.ranks")) {
+                return config.getStringList("guildDiscordLinking.guildRoster.audit.rankList.ranks");
             }
             return Collections.emptyList();
         } catch (Throwable t) {

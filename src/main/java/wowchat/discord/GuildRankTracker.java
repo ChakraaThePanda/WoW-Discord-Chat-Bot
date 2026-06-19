@@ -66,14 +66,15 @@ public final class GuildRankTracker {
     }
 
     /**
-     * Returns how many full days a character has been at their current rank index.
+     * Returns how many full hours a character has been at their current rank index.
      * Returns -1 if not tracked (should not happen after update() has been called).
      */
-    public static synchronized long getDaysSinceRankAssigned(String charName, int rankIndex) {
+    public static synchronized long getHoursSinceRankAssigned(String charName, int rankIndex) {
         RankRecord rec = history.get(charName.toLowerCase());
         if (rec == null || rec.rankIndex != rankIndex) return -1;
-        return (System.currentTimeMillis() - rec.firstSeenAtMs) / (1000L * 60 * 60 * 24);
+        return (System.currentTimeMillis() - rec.firstSeenAtMs) / (1000L * 60 * 60);
     }
+
 
     private static void load() {
         history.clear();
