@@ -511,13 +511,48 @@ class Discord(discordConnectionCallback: CommonConnectionCallback) extends Liste
           } else {
             val character = event.getOption("character").getAsString
             Global.game.fold(event.getHook.sendMessage(notOnline).setEphemeral(true).queue())(g => {
-              event.getName match {
-                case "promote" =>
-                  g.sendGuildPromote(character)
-                  event.getHook.sendMessage(s"✅ Promote sent for **$character**.").setEphemeral(true).queue()
-                case "demote" =>
-                  g.sendGuildDemote(character)
-                  event.getHook.sendMessage(s"✅ Demote sent for **$character**.").setEphemeral(true).queue()
+              val validationError: Option[String] = g match {
+                case handler: wowchat.game.GamePacketHandler =>
+                  val botName = Global.config.wow.character
+                  val roster = handler.getGuildRoster
+                  val gInfo = handler.getGuildInfo
+                  val targetOpt = roster.values.find(_.name.equalsIgnoreCase(character))
+                  val botOpt = roster.values.find(_.name.equalsIgnoreCase(botName))
+                  (targetOpt, event.getName) match {
+                    case (None, _) =>
+                      Some(s"❌ **$character** was not found in the guild roster.")
+                    case (Some(target), "promote") =>
+                      botOpt match {
+                        case Some(bot) if target.rankIndex - 1 == bot.rankIndex =>
+                          Some(s"❌ Cannot promote **$character** - promoting them would give them the same rank as the bot.")
+                        case Some(bot) if target.rankIndex <= bot.rankIndex =>
+                          Some(s"❌ Cannot promote **$character** - they already have an equal or higher rank than the bot.")
+                        case _ => None
+                      }
+                    case (Some(target), "demote") =>
+                      if (gInfo != null && target.rankIndex >= gInfo.ranks.keys.max)
+                        Some(s"❌ Cannot demote **$character** - they are already at the lowest guild rank.")
+                      else None
+                    case _ => None
+                  }
+                case _ => None
+              }
+              validationError match {
+                case Some(err) =>
+                  event.getHook.sendMessage(err).setEphemeral(true).queue()
+                case None =>
+                  event.getName match {
+                    case "promote" =>
+                      g.sendGuildPromote(character)
+                      event.getHook.sendMessage(s"✅ Promote sent for **$character**.").setEphemeral(true).queue()
+                    case "demote" =>
+                      g.sendGuildDemote(character)
+                      event.getHook.sendMessage(s"✅ Demote sent for **$character**.").setEphemeral(true).queue()
+                  }
+                  g match {
+                    case handler: wowchat.game.GamePacketHandler => handler.forceRosterRefresh()
+                    case _ =>
+                  }
               }
             })
           }

@@ -51,6 +51,8 @@ class GamePacketHandler(realmId: Int, realmName: String, sessionKey: Array[Byte]
   protected var lastRequestedGuildRoster: Long = _
   def isInWorld: Boolean = inWorld
   def getGuildRoster = guildRoster
+  def getGuildInfo: GuildInfo = guildInfo
+  def forceRosterRefresh(): Unit = updateGuildRoster
   protected val executorService = Executors.newSingleThreadScheduledExecutor
 
   // cannot use multimap here because need deterministic order
