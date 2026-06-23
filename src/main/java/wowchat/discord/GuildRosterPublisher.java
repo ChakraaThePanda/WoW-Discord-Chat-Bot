@@ -389,7 +389,7 @@ public final class GuildRosterPublisher {
             String description_prefix = prefix.toString();
             
             // Footer: all pages get the footer for identification
-            String footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date();
+            String footerText = GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + GuildEmbedUtil.getFormattedDate();
             
             MessageEmbed embed = new EmbedBuilder()
                 .setTitle(title)

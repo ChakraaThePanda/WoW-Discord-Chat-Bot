@@ -9,6 +9,8 @@ import wowchat.common.Global$;
 import wowchat.game.GameCommandHandler;
 import wowchat.game.GamePacketHandler;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -18,6 +20,12 @@ import java.util.List;
 public final class GuildEmbedUtil {
 
     private GuildEmbedUtil() {} // Utility class - no instantiation
+
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("EEE MMM dd yyyy HH:mm:ss zzz");
+
+    public static String getFormattedDate() {
+        return DATE_FORMAT.format(new Date());
+    }
     
     // Cache the last known identifier to avoid "Unknown Guild" after reconnects
     private static String cachedIdentifier = null;

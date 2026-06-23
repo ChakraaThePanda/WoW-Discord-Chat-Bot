@@ -253,7 +253,7 @@ public final class GuildOnlineListPublisher {
             .setTitle(title)
             .setDescription(listContent)
             .setColor(Color.decode("#2b2d31"))
-            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date())
+            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + GuildEmbedUtil.getFormattedDate())
             .build();
 
         // Post/update to all configured channels

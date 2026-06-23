@@ -195,7 +195,7 @@ public final class GuildStatsPublisher {
         EmbedBuilder eb = new EmbedBuilder();
         eb.setTitle("Guild Statistics");
         eb.setColor(Color.decode("#2b2d31"));
-        eb.setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date());
+        eb.setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + GuildEmbedUtil.getFormattedDate());
 
         if (ConfigHelper.isStatsBlockEnabled("show_faction_distribution")) {
             eb.addField("Faction Distribution", buildFactionGraph(factionCounts, totalMembers), false);

@@ -212,7 +212,7 @@ public final class GuildDiscordAuditPublisher {
             .setTitle("Guild Sync Audit")
             .setDescription(auditDescStr)
             .setColor(Color.decode("#2b2d31"))
-            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + new java.util.Date())
+            .setFooter(GuildEmbedUtil.getGuildRealmIdentifier() + " - Last updated: " + GuildEmbedUtil.getFormattedDate())
             .build();
     }
 
